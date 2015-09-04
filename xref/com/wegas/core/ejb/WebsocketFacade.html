@@ -126,7 +126,7 @@
 <a class="jxr_linenumber" name="116" href="#116">116</a>             tmp = <strong class="jxr_keyword">new</strong> Pusher(getProperty(<span class="jxr_string">"pusher.appId"</span>),
 <a class="jxr_linenumber" name="117" href="#117">117</a>                     getProperty(<span class="jxr_string">"pusher.key"</span>), getProperty(<span class="jxr_string">"pusher.secret"</span>));
 <a class="jxr_linenumber" name="118" href="#118">118</a>         } <strong class="jxr_keyword">catch</strong> (Exception e) {
-<a class="jxr_linenumber" name="119" href="#119">119</a>             logger.error(<span class="jxr_string">"Pusher init failed, please check your configuration"</span>);
+<a class="jxr_linenumber" name="119" href="#119">119</a>             logger.warn(<span class="jxr_string">"Pusher init failed, please check your configuration"</span>);
 <a class="jxr_linenumber" name="120" href="#120">120</a>             logger.debug(<span class="jxr_string">"Pusher error details"</span>, e);
 <a class="jxr_linenumber" name="121" href="#121">121</a>             tmp = <strong class="jxr_keyword">null</strong>;
 <a class="jxr_linenumber" name="122" href="#122">122</a>         }
