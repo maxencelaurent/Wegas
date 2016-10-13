@@ -39,7 +39,7 @@ public class EMailFacade {
      *
      * @param to
      * @param from
-     * @param replyTo effective from
+     * @param replyTo     effective from
      * @param subject
      * @param body
      * @param toType
@@ -91,39 +91,5 @@ public class EMailFacade {
         }
 
         Transport.send(msg);
-    }
-
-    /**
-     * @deprecated
-     *
-     * @param p
-     * @param from
-     * @param subject
-     * @param body
-     */
-    public void send(Player p, String from, String subject, String body) throws MessagingException {
-        this.send(p.getUser().getName(), from, null, subject, body, RecipientType.TO, "text/plain", false);
-    }
-
-    /**
-     * @deprecated @param p
-     * @param msg
-     */
-    public void send(Player p, Message msg) throws MessagingException {
-
-        this.send(p, "noreply@" + Helper.getWegasProperty("mail.default_domain"), msg.getSubject(), msg.getBody());
-    }
-
-    /**
-     *
-     * @param messageEvent
-     */
-    public void listener(@Observes MessageEvent messageEvent) {
-        // @fixme remove this hardcoded condition w/ some db values or at least a line in the prop file
-//        if (messageEvent.getType().equals("important")) {
-//            this.send("fx at red-agent.com", "admin@wegas.com",
-//                    messageEvent.getMessage().getSubject(),
-//                    messageEvent.getMessage().getBody());
-//        }
     }
 }

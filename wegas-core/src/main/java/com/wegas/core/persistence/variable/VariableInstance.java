@@ -40,6 +40,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.eclipse.persistence.annotations.OptimisticLocking;
+import org.eclipse.persistence.config.CacheUsage;
+import org.eclipse.persistence.config.QueryHints;
+import org.eclipse.persistence.config.QueryType;
 
 ////import javax.xml.bind.annotation.XmlTransient;
 /**
@@ -50,11 +53,19 @@ import org.eclipse.persistence.annotations.OptimisticLocking;
 @NamedQueries({
     @NamedQuery(name = "VariableInstance.findPlayerInstance",
             query = "SELECT vi FROM VariableInstance vi WHERE "
-            + "(vi.player.id = :playerId AND vi.playerScope.id = :scopeId)"
+            + "(vi.player.id = :playerId AND vi.playerScope.id = :scopeId)",
+            hints = {
+                @QueryHint(name = QueryHints.QUERY_TYPE, value = QueryType.ReadObject),
+                @QueryHint(name = QueryHints.CACHE_USAGE, value = CacheUsage.CheckCacheThenDatabase)
+            }
     ),
     @NamedQuery(name = "VariableInstance.findTeamInstance",
             query = "SELECT vi FROM VariableInstance vi WHERE "
-            + "(vi.team.id = :teamId AND vi.teamScope.id = :scopeId)"
+            + "(vi.team.id = :teamId AND vi.teamScope.id = :scopeId)",
+            hints = {
+                @QueryHint(name = QueryHints.QUERY_TYPE, value = QueryType.ReadObject),
+                @QueryHint(name = QueryHints.CACHE_USAGE, value = CacheUsage.CheckCacheThenDatabase)
+            }
     )
 })
 
@@ -442,22 +453,6 @@ abstract public class VariableInstance extends AbstractEntity implements Broadca
     @JsonIgnore
     public void setPlayerScope(PlayerScope playerScope) {
         this.playerScope = playerScope;
-    }
-
-    /**
-     * @return the gameScopeKey
-     * @JsonIgnore public Long getGameScopeKey() { return gameScopeKey; }
-     */
-    /**
-     * return instance descriptor equals the instance is a default or effective
-     * one
-     *
-     * @return instance descriptor
-     * @deprecated {@link #findDescriptor()}
-     */
-    @JsonIgnore
-    public VariableDescriptor getDescriptorOrDefaultDescriptor() {
-        return this.findDescriptor();
     }
 
     /**

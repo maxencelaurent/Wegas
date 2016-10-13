@@ -265,58 +265,6 @@ public class WRequirement extends AbstractEntity {
         this.taskInstance = taskInstance;
     }
 
-    /**
-     *
-     * @deprecated (I hope so)
-     * @param variable
-     * @return just not a clue...
-     */
-    public double getVariableValue(String variable) {
-        switch (variable) {
-            case "quality":
-                return this.getQuality();
-            case "quantity":
-                return this.getQuantity();
-        }
-        return Double.NaN;
-    }
-
-    /**
-     *
-     * @param variable
-     * @param value
-     */
-    public void setVariableValue(String variable, double value) {
-        switch (variable) {
-            case "level":
-                this.setLevel(((Long) Math.round(value)).intValue());
-                break;
-            case "quantity":
-                this.setQuantity(Math.round(value));
-                break;
-            default:
-                throw new UnsupportedOperationException("Unexpected parameter " + variable);
-        }
-    }
-
-    /**
-     *
-     * @param variable
-     * @param value
-     */
-    public void addAtVariableValue(String variable, double value) {
-        switch (variable) {
-            case "level":
-                this.setLevel(this.getLevel() + ((Long) Math.round(value)).intValue());
-                break;
-            case "quantity":
-                this.setQuantity(this.getQuantity() + Math.round(value));
-                break;
-            default:
-                throw new UnsupportedOperationException("Unexpected parameter " + variable);
-        }
-    }
-
     public void addActivity(Activity activity) {
         this.activities.add(activity);
         activity.setRequirement(this);

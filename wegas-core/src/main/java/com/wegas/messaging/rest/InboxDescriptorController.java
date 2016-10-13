@@ -13,7 +13,6 @@ import com.wegas.core.ejb.RequestFacade;
 import com.wegas.core.ejb.VariableInstanceFacade;
 import com.wegas.core.persistence.variable.VariableInstance;
 import com.wegas.core.security.util.SecurityHelper;
-import com.wegas.messaging.ejb.MessageFacade;
 import com.wegas.messaging.persistence.InboxInstance;
 import com.wegas.messaging.persistence.Message;
 import java.util.List;
@@ -24,7 +23,6 @@ import javax.ws.rs.core.MediaType;
 import org.apache.shiro.authz.UnauthorizedException;
 
 /**
- * @deprecated ???
  * @author Francois-Xavier Aeberhard (fx at red-agent.com)
  */
 @Stateless
@@ -32,11 +30,6 @@ import org.apache.shiro.authz.UnauthorizedException;
 @Produces(MediaType.APPLICATION_JSON)
 public class InboxDescriptorController {
 
-    /**
-     *
-     */
-    @EJB
-    private MessageFacade messageFacade;
     /**
      *
      */
@@ -77,28 +70,10 @@ public class InboxDescriptorController {
     @Path("Message/{messageId : [1-9][0-9]*}")
     public Message find(@PathParam("messageId") Long messageId) {
 
-        Message m = messageFacade.find(messageId);
+        Message m = variableInstanceFacade.find(messageId, Message.class);
         checkPermissions(m);
 
         return m;
-    }
-
-    /**
-     * Edit a message
-     *
-     * @param messageId if of message to edit
-     * @param message   new message version
-     * @return the new message version
-     */
-    @PUT
-    @Path("Message/{messageId : [1-9][0-9]*}")
-    public InboxInstance editMessage(@PathParam("messageId") Long messageId,
-            Message message) {
-
-        Message update = messageFacade.update(messageId, message);
-        checkPermissions(update);
-
-        return update.getInboxInstance();
     }
 
     /**
@@ -111,7 +86,7 @@ public class InboxDescriptorController {
     @Path("Message/Read/{messageId : [1-9][0-9]*}")
     public InboxInstance readMessage(@PathParam("messageId") Long messageId) {
 
-        Message update = messageFacade.find(messageId);
+        Message update = variableInstanceFacade.find(messageId, Message.class);
         checkPermissions(update);
 
         update.setUnread(false);
@@ -143,23 +118,6 @@ public class InboxDescriptorController {
             requestFacade.commit();
         }
         return inbox;
-    }
-
-    /**
-     * Delete a message
-     *
-     * @param messageId id of message to delete
-     * @return InboxInstance which does not contains the message anymore
-     */
-    @DELETE
-    @Path("Message/{messageId : [1-9][0-9]*}")
-    public InboxInstance deleteMessage(@PathParam("messageId") Long messageId) {
-
-        Message m = messageFacade.find(messageId);
-        checkPermissions(m);
-
-        messageFacade.remove(m);
-        return m.getInboxInstance();
     }
 
     /**

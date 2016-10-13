@@ -140,6 +140,17 @@ public abstract class BaseFacade<T extends AbstractEntity> implements AbstractFa
     }
 
     /**
+     *
+     * @param <A>
+     * @param entityId
+     * @param klass
+     * @return
+     */
+    public <A extends AbstractEntity> A find(final long entityId, Class<A> klass) {
+        return getEntityManager().find(klass, entityId);
+    }
+
+    /**
      * Find all entities which are instanceof T
      *
      * @return all instances of type T
@@ -156,9 +167,10 @@ public abstract class BaseFacade<T extends AbstractEntity> implements AbstractFa
      *
      * @param range int array containing two elements... it's quite ugly...
      * @return all entities matching the range filter
-     * @deprecated 
+     * @deprecated
      */
     @Override
+    @Deprecated
     public List<T> findRange(int[] range) {
         final CriteriaQuery<T> query = getEntityManager().getCriteriaBuilder().createQuery(entityClass);
         query.select(query.from(entityClass));

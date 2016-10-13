@@ -41,9 +41,6 @@ import java.util.List;
             @Index(columnList = "choicedescriptor_id")
         }
 )
-@NamedQueries({
-    @NamedQuery(name = "Result.findByName", query = "SELECT DISTINCT res FROM Result res WHERE res.choiceDescriptor.id=:choicedescriptorId AND res.name LIKE :name")
-})
 public class Result extends NamedEntity implements Searchable, Scripted, LabelledEntity {
 
     private static final long serialVersionUID = 1L;

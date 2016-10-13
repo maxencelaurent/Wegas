@@ -23,6 +23,9 @@ import com.wegas.core.security.persistence.User;
 import javax.persistence.*;
 import javax.validation.constraints.NotNull;
 import java.util.*;
+import org.eclipse.persistence.config.CacheUsage;
+import org.eclipse.persistence.config.QueryHints;
+import org.eclipse.persistence.config.QueryType;
 
 /**
  * @author Francois-Xavier Aeberhard (fx at red-agent.com)
@@ -31,16 +34,21 @@ import java.util.*;
 @Entity
 @Table(
         uniqueConstraints = {
-                //    @UniqueConstraint(columnNames = {"name"}),
-                @UniqueConstraint(columnNames = {"token"})},
+            //    @UniqueConstraint(columnNames = {"name"}),
+            @UniqueConstraint(columnNames = {"token"})},
         indexes = {
-                @Index(columnList = "gamemodelid")
+            @Index(columnList = "gamemodelid")
         }
 )
 @NamedQueries({
-        @NamedQuery(name = "Game.findByStatus", query = "SELECT DISTINCT g FROM Game g WHERE TYPE(g) != DebugGame AND g.status = :status ORDER BY g.createdTime ASC"),
-        @NamedQuery(name = "Game.findByToken", query = "SELECT DISTINCT g FROM Game g WHERE  g.status = :status AND g.token = :token"),
-        @NamedQuery(name = "Game.findByNameLike", query = "SELECT DISTINCT g FROM Game g WHERE  g.name LIKE :name")
+    @NamedQuery(name = "Game.findByStatus", query = "SELECT DISTINCT g FROM Game g WHERE TYPE(g) != DebugGame AND g.status = :status ORDER BY g.createdTime ASC"),
+    @NamedQuery(name = "Game.findByToken", query = "SELECT DISTINCT g FROM Game g WHERE  g.status = :status AND g.token = :token",
+            hints = {
+                @QueryHint(name = QueryHints.QUERY_TYPE, value = QueryType.ReadObject),
+                @QueryHint(name = QueryHints.CACHE_USAGE, value = CacheUsage.CheckCacheThenDatabase)
+            }
+    ),
+    @NamedQuery(name = "Game.findByNameLike", query = "SELECT DISTINCT g FROM Game g WHERE  g.name LIKE :name")
 })
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Game extends NamedEntity implements Broadcastable {
@@ -118,10 +126,9 @@ public class Game extends NamedEntity implements Broadcastable {
 
     /**
      *
-     @Column(name = "gamemodelid", nullable = false, insertable = false, updatable = false)
-     private Long gameModelId;
+     * @Column(name = "gamemodelid", nullable = false, insertable = false,
+     * updatable = false) private Long gameModelId;
      */
-
     /**
      *
      */

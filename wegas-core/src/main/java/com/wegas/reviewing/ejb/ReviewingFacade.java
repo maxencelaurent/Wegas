@@ -330,14 +330,6 @@ public class ReviewingFacade {
     }
 
     /**
-     * @deprecated @param evalInstance
-     * @param other
-     */
-    public void mergeEval(EvaluationInstance evalInstance, EvaluationInstance other) {
-        evalInstance.merge(other);
-    }
-
-    /**
      * Save (update) evaluations in given list
      *
      * @param evs evaluations to update

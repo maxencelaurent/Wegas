@@ -52,9 +52,7 @@ public class ChoiceInstance extends VariableInstance {
     private String currentResultName;
 
     @Transient
-    /**
-     * @deprecated
-     */
+    @Deprecated
     private Integer currentResultIndex = null;
 
     public ChoiceInstance() {
@@ -105,17 +103,15 @@ public class ChoiceInstance extends VariableInstance {
     }
 
     /**
-     * @deprecated 
      * @return 
      */
+    @Deprecated 
     @JsonIgnore
     public Integer getCurrentResultIndex() {
         return currentResultIndex;
     }
 
-    /**
-     * @deprecated 
-     */
+    @Deprecated 
     @JsonProperty
     public void setCurrentResultIndex(Integer index) {
         this.currentResultIndex = index;

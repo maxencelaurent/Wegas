@@ -14,10 +14,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.persistence.*;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.wegas.core.ejb.VariableDescriptorFacade;
 import com.wegas.core.exception.client.WegasIncompatibleType;
 import com.wegas.core.persistence.ListUtils;
@@ -58,21 +56,12 @@ public class ResourceInstance extends VariableInstance {
      *
      */
     private boolean active = true;
-    /**
-     * @deprecated
-     */
-    @Transient
-    private Map<String, Long> skillsets;
-    /**
+
+    /*
      *
      */
     @ElementCollection
     private Map<String, String> properties = new HashMap<>();
-    /**
-     * @deprecated
-     */
-    @Transient
-    private Integer moral;
     /**
      *
      */
@@ -295,21 +284,6 @@ public class ResourceInstance extends VariableInstance {
     }
 
     /**
-     * @deprecated @return the skillset
-     */
-    @JsonIgnore
-    public Map<String, Long> getDeserializedSkillsets() {
-        return this.skillsets;
-    }
-
-    /**
-     * @deprecated @param skillsets
-     */
-    public void setSkillsets(Map<String, Long> skillsets) {
-        this.skillsets = skillsets;
-    }
-
-    /**
      * @return the properties
      */
     public Map<String, String> getProperties() {
@@ -353,24 +327,6 @@ public class ResourceInstance extends VariableInstance {
     }
 
     /**
-     * @return the moral
-     * @deprecated
-     */
-    @JsonIgnore
-    public Integer getMoral() {
-        return this.moral;
-    }
-
-    /**
-     * @param moral the moral to set
-     * @deprecated
-     */
-    @JsonProperty
-    public void setMoral(int moral) {
-        this.moral = moral;
-    }
-
-    /**
      * @return the confidence
      */
     public int getConfidence() {
@@ -385,37 +341,4 @@ public class ResourceInstance extends VariableInstance {
     public void setConfidence(int confidence) {
         this.confidence = confidence;
     }
-
-    /**
-     *
-     * @param currentPosition
-     * @param nextPosition
-     * @return assignment list with up to date order
-     * @deprecated
-     */
-    public List<Assignment> moveAssignemnt(Integer currentPosition, Integer nextPosition) {
-        Assignment assignment = this.assignments.remove(currentPosition.intValue());
-        this.assignments.add(nextPosition, assignment);
-        return this.assignments;
-    }
-
-    /*
-    private class UpdaterImpl implements ListUtils.Updater {
-
-        private ResourceInstance parent;
-
-        public UpdaterImpl(ResourceInstance parent) {
-            this.parent = parent;
-        }
-
-        @Override
-        public void addEntity(AbstractEntity entity) {
-            Occupation o = (Occupation) entity;
-            o.setResourceInstance(parent);
-        }
-
-        @Override
-        public void removeEntity(AbstractEntity entity) {
-        } 
-    } */
 }

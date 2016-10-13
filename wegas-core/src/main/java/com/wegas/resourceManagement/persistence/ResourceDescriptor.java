@@ -147,36 +147,6 @@ public class ResourceDescriptor extends VariableDescriptor<ResourceInstance> {
     }
 
     /**
-     *
-     * @param p
-     * @return resource moral
-     * @deprecated
-     */
-    public Integer getMoral(Player p) {
-        return Integer.parseInt(this.getInstance(p).getProperty("motivation"), 10);
-    }
-
-    /**
-     *
-     * @param p
-     * @param value
-     * @deprecated
-     */
-    public void setMoral(Player p, Integer value) {
-        this.getInstance(p).setProperty("motivation", value.toString());
-    }
-
-    /**
-     *
-     * @param p
-     * @param value
-     * @deprecated
-     */
-    public void addAtMoral(Player p, Integer value) {
-        this.addNumberAtInstanceProperty(p, "motivation", value.toString());
-    }
-
-    /**
      * Get a resource instance property, cast to double
      *
      * @param p

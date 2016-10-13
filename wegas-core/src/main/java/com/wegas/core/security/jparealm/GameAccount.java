@@ -21,7 +21,7 @@ import javax.persistence.Transient;
  * @author Cyril Junod (cyril.junod at gmail.com)
  */
 @Entity
-@Deprecated
+//@Deprecated
 public class GameAccount extends JpaAccount {
 
     private static final long serialVersionUID = 1L;

@@ -12,7 +12,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wegas.core.event.client.CustomEvent;
 import com.wegas.core.event.client.EntityUpdatedEvent;
 import com.wegas.core.event.client.ExceptionEvent;
-import com.wegas.core.event.client.WarningEvent;
 import com.wegas.core.exception.client.WegasErrorMessage;
 import com.wegas.core.exception.client.WegasOutOfBoundException;
 import com.wegas.core.exception.client.WegasRuntimeException;
@@ -394,7 +393,6 @@ public class SerializationTest {
         ndPayload.setDefaultInstance(niPayload);
 
         CustomEvent custom = new CustomEvent("Dummy CustomEvent", payload);
-        WarningEvent warn = new WarningEvent("Warning Dummy Event", payload);
 
         List<WegasRuntimeException> exceptions = new ArrayList<>();
         exceptions.add(new WegasOutOfBoundException(0L, 10L, 15.0, ndPayload.getLabel()));
@@ -410,13 +408,11 @@ public class SerializationTest {
 
         ManagedResponse managedResponse = new ManagedResponse();
         managedResponse.getEvents().add(custom);
-        managedResponse.getEvents().add(warn);
         managedResponse.getEvents().add(ex);
         managedResponse.getEvents().add(update);
 
         String json = mapper.writeValueAsString(managedResponse);
 
         System.out.println("JSON: " + json);
-
     }
 }

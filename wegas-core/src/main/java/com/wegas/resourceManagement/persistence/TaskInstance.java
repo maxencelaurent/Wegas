@@ -7,10 +7,8 @@
  */
 package com.wegas.resourceManagement.persistence;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.wegas.core.exception.client.WegasIncompatibleType;
-import com.wegas.core.exception.client.WegasOutOfBoundException;
 import com.wegas.core.persistence.AbstractEntity;
 import com.wegas.core.persistence.ListUtils;
 import com.wegas.core.persistence.variable.VariableInstance;
@@ -22,9 +20,7 @@ import java.util.Objects;
 import javax.persistence.CascadeType;
 import javax.persistence.ElementCollection;
 import javax.persistence.Entity;
-import javax.persistence.JoinColumn;
 import javax.persistence.OneToMany;
-import javax.persistence.Transient;
 
 /**
  *
@@ -37,6 +33,7 @@ import javax.persistence.Transient;
     @Index(columnList = "plannification.taskinstance_variableinstance_id"),
     @Index(columnList = "properties.taskinstance_variableinstance_id")
 })*/
+@JsonIgnoreProperties(value = {"duration"})
 public class TaskInstance extends VariableInstance {
 
     private static final long serialVersionUID = 1L;
@@ -44,11 +41,6 @@ public class TaskInstance extends VariableInstance {
      *
      */
     private boolean active = true;
-    /**
-     *
-     */
-    @Transient
-    private Double duration;
     /**
      *
      */
@@ -78,28 +70,6 @@ public class TaskInstance extends VariableInstance {
      */
     public void setActive(boolean active) {
         this.active = active;
-    }
-
-    /**
-     * @return the duration
-     */
-    @JsonIgnore
-    public Double getDuration() {
-        return duration;
-    }
-
-    /**
-     * @deprecated moved as instance property, setter kept for old JSON backward
-     * compatibility
-     * @param duration the duration to set
-     */
-    @JsonProperty
-    public void setDuration(double duration) {
-        if (duration < 0.0) {
-            throw new WegasOutOfBoundException(0L, null, duration, "duration");
-        } else {
-            this.duration = duration;
-        }
     }
 
     /**

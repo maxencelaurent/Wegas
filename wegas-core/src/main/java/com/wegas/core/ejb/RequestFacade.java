@@ -76,24 +76,6 @@ public class RequestFacade {
 
     /**
      *
-     * @param view
-     * @deprecated
-     */
-    public void setView(Class view) {
-        this.requestManager.setView(view);
-    }
-
-    /**
-     *
-     * @return current request view
-     * @deprecated
-     */
-    public Class getView() {
-        return this.requestManager.getView();
-    }
-
-    /**
-     *
      * @param playerId
      */
     public void setPlayer(Long playerId) {

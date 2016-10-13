@@ -106,12 +106,10 @@ abstract public class AbstractScope<T extends AbstractEntity> extends AbstractEn
      *         stored in the RequestManager.
      */
     @JsonIgnore
-    @Deprecated
     abstract public Map<T, VariableInstance> getPrivateInstances();
 
     @JsonIgnore
     @JsonProperty("privateInstances")
-    @Deprecated
     public Map<Long, VariableInstance> getPrivateInstancesByKeyId() {
         return mapInstances(this.getPrivateInstances());
     }

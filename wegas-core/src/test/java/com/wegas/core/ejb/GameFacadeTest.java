@@ -41,37 +41,6 @@ public class GameFacadeTest extends AbstractEJBTest {
         gameController = lookupBy(GameController.class);
     }
 
-    /**
-     * Test registeredGames
-     */
-    @Test
-    public void testFindRegisteredGames() throws Exception {
-        final TeamFacade teamFacade = lookupBy(TeamFacade.class);
-        final PlayerFacade playerFacade = lookupBy(PlayerFacade.class);
-        final UserFacade userFacade = lookupBy(UserFacade.class);
-
-        final Game g = new Game("game");
-        g.setGameModel(gameModel);
-        gameFacade.create(g);
-        final Team t = new Team("team");
-        t.setGame(g);
-        teamFacade.create(t);
-        final User u = new User();
-        final JpaAccount abstractAccount = new JpaAccount();
-        abstractAccount.setEmail("a@a.local");
-        u.addAccount(abstractAccount);
-        userFacade.create(u);
-        final Player p = new Player("player");
-        p.setUser(u);
-        p.setTeam(t);
-        playerFacade.create(p);
-
-        final List<Game> registeredGames = gameFacade.findRegisteredGames(u.getId());
-        assertEquals("game", registeredGames.get(0).getName());
-
-        gameFacade.remove(g.getId());
-    }
-
     @Test
     public void testGameCreation() throws IOException {
         VariableDescriptorFacade vdf = VariableDescriptorFacade.lookup();

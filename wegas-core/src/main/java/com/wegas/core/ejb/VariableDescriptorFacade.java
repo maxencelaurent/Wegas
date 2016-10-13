@@ -41,6 +41,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import javax.persistence.Query;
+import org.eclipse.persistence.config.CacheUsage;
+import org.eclipse.persistence.config.HintValues;
+import org.eclipse.persistence.config.QueryHints;
+import org.eclipse.persistence.config.QueryType;
+import org.eclipse.persistence.queries.ValueReadQuery;
 
 /**
  * @author Francois-Xavier Aeberhard (fx at red-agent.com)
@@ -225,29 +231,6 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
     }
 
     /**
-     * @param vd
-     * @return descriptor container
-     * @deprecated use {@link VariableDescriptor#getParent()}
-     */
-    public DescriptorListI findParentList(VariableDescriptor vd) throws NoResultException {
-        return vd.getParent();
-    }
-
-    /**
-     * @param item
-     * @return the parent descriptor
-     * @throws WegasNoResultException if the desciptor is at root-level
-     * @deprecated use {@link VariableDescriptor#getParentList()}
-     */
-    public ListDescriptor findParentListDescriptor(final VariableDescriptor item) throws WegasNoResultException {
-        if (item.getParentList() != null) {
-            return item.getParentList();
-        } else {
-            throw new WegasNoResultException();
-        }
-    }
-
-    /**
      * @param gameModel
      * @param name
      * @return the gameModel descriptor matching the name
@@ -260,12 +243,22 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
             }
         }
         throw new WegasNoResultException();*/
-        
+
         try {
             TypedQuery<VariableDescriptor> query = getEntityManager().createNamedQuery("VariableDescriptor.findByGameModelIdAndName", VariableDescriptor.class);
             query.setParameter("gameModelId", gameModel.getId());
             query.setParameter("name", name);
             return query.getSingleResult();
+
+            /*
+            Query query = getEntityManager().createQuery("SELECT DISTINCT vd.id FROM VariableDescriptor vd where vd.gameModel.id = :gameModelId AND vd.name LIKE :name");
+            query.setParameter("gameModelId", gameModel.getId());
+            query.setParameter("name", name);
+            query.setHint(QueryHints.QUERY_TYPE, QueryType.V);
+            Object singleResult = query.getSingleResult();
+            Long id = (Long) singleResult;
+            return this.find(id);
+             */
         } catch (NoResultException ex) {
             throw new WegasNoResultException(ex);
         }
@@ -317,8 +310,9 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
      * @param name
      * @return the gameModel descriptor matching the name
      * @throws com.wegas.core.exception.internal.WegasNoResultException
-     * @deprecated
+     * @deprecated MASSIVE JS USAGE 
      */
+    @Deprecated
     public VariableDescriptor findByName(final GameModel gameModel, final String name) throws WegasNoResultException {
         return this.find(gameModel, name);
     }

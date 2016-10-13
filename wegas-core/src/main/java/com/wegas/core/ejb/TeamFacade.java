@@ -131,18 +131,6 @@ public class TeamFacade extends BaseFacade<Team> {
     }
 
     /**
-     * @param team
-     * @return
-     * @deprecated use JPA team.privateInstances
-     */
-    public List<VariableInstance> getAssociatedInstances(Team team) {
-        return team.getPrivateInstances();
-        //Query findInstances = getEntityManager().createNamedQuery("findTeamInstances");
-        //findInstances.setParameter("teamid", team.getId());
-        //return findInstances.getResultList();
-    }
-
-    /**
      *
      */
     public TeamFacade() {

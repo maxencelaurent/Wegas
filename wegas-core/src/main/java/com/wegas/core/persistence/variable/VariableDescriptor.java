@@ -42,6 +42,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.eclipse.persistence.annotations.CacheIndex;
+import org.eclipse.persistence.config.CacheUsage;
+import org.eclipse.persistence.config.QueryHints;
+import org.eclipse.persistence.config.QueryType;
 
 /**
  * @param <T>
@@ -51,42 +55,47 @@ import java.util.Map;
 @Inheritance(strategy = InheritanceType.JOINED)
 //@EntityListeners({GmVariableDescriptorListener.class})
 @Table(uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"gamemodel_gamemodelid", "name"}) // Name has to be unique for the whole game model
+    @UniqueConstraint(columnNames = {"gamemodel_gamemodelid", "name"}) // Name has to be unique for the whole game model
 // @UniqueConstraint(columnNames = {"variabledescriptor_id", "name"})           // Name has to be unique within a list
 // @UniqueConstraint(columnNames = {"rootgamemodel_id", "name"})                // Names have to be unique at the base of a game model (root elements)
 }, indexes = {
-        @Index(columnList = "defaultinstance_variableinstance_id"),
-        @Index(columnList = "items_variabledescriptor_id"),
-        @Index(columnList = "rootgamemodel_id"),
-        @Index(columnList = "dtype")
+    @Index(columnList = "defaultinstance_variableinstance_id"),
+    @Index(columnList = "items_variabledescriptor_id"),
+    @Index(columnList = "rootgamemodel_id"),
+    @Index(columnList = "dtype")
 })
 @NamedQueries({
-        @NamedQuery(
-                name = "VariableDescriptor.findByRootGameModelId",
-                query = "SELECT DISTINCT vd FROM VariableDescriptor vd LEFT JOIN vd.gameModel AS gm WHERE gm.id = :gameModelId"
-        ),
-        @NamedQuery(
-                name = "VariableDescriptor.findByGameModelIdAndName",
-                query = "SELECT vd FROM VariableDescriptor vd where vd.gameModel.id = :gameModelId AND vd.name LIKE :name"
-        )
+    @NamedQuery(
+            name = "VariableDescriptor.findByRootGameModelId",
+            query = "SELECT DISTINCT vd FROM VariableDescriptor vd LEFT JOIN vd.gameModel AS gm WHERE gm.id = :gameModelId"
+    ),
+    @NamedQuery(
+            name = "VariableDescriptor.findByGameModelIdAndName",
+            query = "SELECT vd FROM VariableDescriptor vd where vd.gameModel.id = :gameModelId AND vd.name LIKE :name",
+            hints = {
+                @QueryHint(name = QueryHints.QUERY_TYPE, value = QueryType.ReadObject),
+                @QueryHint(name = QueryHints.CACHE_USAGE, value = CacheUsage.CheckCacheThenDatabase)
+            }
+    )
 })
 @JsonSubTypes(value = {
-        @JsonSubTypes.Type(name = "ListDescriptor", value = ListDescriptor.class),
-        @JsonSubTypes.Type(name = "StringDescriptor", value = StringDescriptor.class),
-        @JsonSubTypes.Type(name = "TextDescriptor", value = TextDescriptor.class),
-        @JsonSubTypes.Type(name = "BooleanDescriptor", value = BooleanDescriptor.class),
-        @JsonSubTypes.Type(name = "NumberDescriptor", value = NumberDescriptor.class),
-        @JsonSubTypes.Type(name = "InboxDescriptor", value = InboxDescriptor.class),
-        @JsonSubTypes.Type(name = "FSMDescriptor", value = StateMachineDescriptor.class),
-        @JsonSubTypes.Type(name = "ResourceDescriptor", value = ResourceDescriptor.class),
-        @JsonSubTypes.Type(name = "TaskDescriptor", value = TaskDescriptor.class),
-        @JsonSubTypes.Type(name = "QuestionDescriptor", value = QuestionDescriptor.class),
-        @JsonSubTypes.Type(name = "ChoiceDescriptor", value = ChoiceDescriptor.class),
-        @JsonSubTypes.Type(name = "SingleResultChoiceDescriptor", value = SingleResultChoiceDescriptor.class),
-        @JsonSubTypes.Type(name = "ObjectDescriptor", value = ObjectDescriptor.class),
-        @JsonSubTypes.Type(name = "PeerReviewDescriptor", value = PeerReviewDescriptor.class),
-        @JsonSubTypes.Type(name = "BurndownDescriptor", value = BurndownDescriptor.class)
+    @JsonSubTypes.Type(name = "ListDescriptor", value = ListDescriptor.class),
+    @JsonSubTypes.Type(name = "StringDescriptor", value = StringDescriptor.class),
+    @JsonSubTypes.Type(name = "TextDescriptor", value = TextDescriptor.class),
+    @JsonSubTypes.Type(name = "BooleanDescriptor", value = BooleanDescriptor.class),
+    @JsonSubTypes.Type(name = "NumberDescriptor", value = NumberDescriptor.class),
+    @JsonSubTypes.Type(name = "InboxDescriptor", value = InboxDescriptor.class),
+    @JsonSubTypes.Type(name = "FSMDescriptor", value = StateMachineDescriptor.class),
+    @JsonSubTypes.Type(name = "ResourceDescriptor", value = ResourceDescriptor.class),
+    @JsonSubTypes.Type(name = "TaskDescriptor", value = TaskDescriptor.class),
+    @JsonSubTypes.Type(name = "QuestionDescriptor", value = QuestionDescriptor.class),
+    @JsonSubTypes.Type(name = "ChoiceDescriptor", value = ChoiceDescriptor.class),
+    @JsonSubTypes.Type(name = "SingleResultChoiceDescriptor", value = SingleResultChoiceDescriptor.class),
+    @JsonSubTypes.Type(name = "ObjectDescriptor", value = ObjectDescriptor.class),
+    @JsonSubTypes.Type(name = "PeerReviewDescriptor", value = PeerReviewDescriptor.class),
+    @JsonSubTypes.Type(name = "BurndownDescriptor", value = BurndownDescriptor.class)
 })
+
 abstract public class VariableDescriptor<T extends VariableInstance> extends NamedEntity implements Searchable, LabelledEntity, Broadcastable {
 
     private static final long serialVersionUID = 1L;
@@ -166,7 +175,6 @@ abstract public class VariableDescriptor<T extends VariableInstance> extends Nam
      */
     @NotNull
     @Basic(optional = false)
-    //@CacheIndex
     protected String name;
 
     @Version
@@ -190,7 +198,6 @@ abstract public class VariableDescriptor<T extends VariableInstance> extends Nam
     //    @JoinColumn(referencedColumnName = "tag_id")})
     //@XmlTransient
     //private List<Tag> tags;
-
     /**
      *
      */
@@ -469,7 +476,8 @@ abstract public class VariableDescriptor<T extends VariableInstance> extends Nam
 
     /**
      * @param context allow to circumscribe the propagation within the given
-     *                context. It may be an instance of GameModel, Game, Team, or Player
+     *                context. It may be an instance of GameModel, Game, Team,
+     *                or Player
      */
     public void propagateDefaultInstance(AbstractEntity context) {
         int sFlag = 0;

@@ -333,68 +333,8 @@ public class TaskDescriptor extends VariableDescriptor<TaskInstance> {
         }
     }
 
-    /**
-     *
-     * @deprecated moved as property
-     * @param p
-     * @return player instance task duration
-     */
-    public double getDuration(Player p) {
-        return this.getInstance(p).getPropertyD("duration");
-    }
-
-    /**
-     *
-     * @deprecated moved as property
-     * @param p
-     * @param value
-     */
-    public void setDuration(Player p, double value) {
-        this.getInstance(p).setProperty("duration", Double.toString(value));
-    }
-
-    /**
-     *
-     * @deprecated moved as property
-     * @param p
-     * @param value
-     */
-    public void addAtDuration(Player p, double value) {
-        TaskInstance instance = this.getInstance(p);
-        double v = instance.getPropertyD("duration") + value;
-        instance.setProperty("duration", Double.toString(v));
-    }
-
     public WRequirement getRequirementByName(Player p, String name) {
         return this.getInstance(p).getRequirementByName(name);
-    }
-
-    /**
-     *
-     * @param p
-     * @param name
-     * @param variable
-     * @param value
-     */
-    public void setRequirementVariable(Player p, String name, String variable, double value) {
-        WRequirement requirement = this.getRequirementByName(p, name);
-        if (requirement != null) {
-            requirement.setVariableValue(variable, value);
-        }
-    }
-
-    /**
-     *
-     * @param p
-     * @param name
-     * @param variable
-     * @param value
-     */
-    public void addAtRequirementVariable(Player p, String name, String variable, double value) {
-        WRequirement requirement = this.getRequirementByName(p, name);
-        if (requirement != null) {
-            requirement.addAtVariableValue(variable, value);
-        }
     }
 
     /**

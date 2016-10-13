@@ -141,17 +141,6 @@ public class PlayerFacade extends BaseFacade<Player> {
         return null;
     }
 
-    /**
-     * @param player
-     * @return all player instances
-     * @deprecated please use {@link Player#getPrivateInstances() }
-     */
-    public List<VariableInstance> getAssociatedInstances(final Player player) {
-        return player.getPrivateInstances();
-        //final Query findPlayerInstance = getEntityManager().createNamedQuery("findPlayerInstances");
-        //return findPlayerInstance.setParameter("playerid", player.getId()).getResultList();
-    }
-
     private List<VariableInstance> getPlayerInstances(Player player) {
         List<VariableInstance> result = new ArrayList<>();
 

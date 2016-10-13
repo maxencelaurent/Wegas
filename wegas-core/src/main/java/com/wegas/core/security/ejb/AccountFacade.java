@@ -10,7 +10,6 @@ package com.wegas.core.security.ejb;
 import com.wegas.core.ejb.BaseFacade;
 import com.wegas.core.ejb.PlayerFacade;
 import com.wegas.core.ejb.RequestManager;
-import com.wegas.core.event.client.WarningEvent;
 import com.wegas.core.exception.client.WegasErrorMessage;
 import com.wegas.core.exception.internal.WegasNoResultException;
 import com.wegas.core.persistence.game.Player;
@@ -357,55 +356,4 @@ public class AccountFacade extends BaseFacade<AbstractAccount> {
         }
         return returnValue;
     }
-
-    /**
-     * @param values
-     * @return bag of scrap
-     * @deprecated 
-     */
-    public List<Map> findAccountsByEmailValues(List<String> values) {
-        List<Map> returnValue = new ArrayList<>();
-        List<String> notValidValue = new ArrayList<>();
-        for (String value : values) {
-            try {
-                Map<String, Object> account = new HashMap<>();
-                JpaAccount a = findByEmail(value.trim());
-                if (a.getFirstname() != null && a.getLastname() != null) {
-                    account.put("label", a.getFirstname() + " " + a.getLastname());
-                } else {
-                    account.put("label", a.getEmail());
-                }
-                account.put("value", a.getId());
-                returnValue.add(account);
-            } catch (WegasNoResultException e2) {
-                notValidValue.add(value);
-            }
-        }
-        requestManager.addEvent(new WarningEvent("NotAddedAccount", notValidValue));
-        return returnValue;
-    }
-
-    /**
-     * piece of scrap
-     *
-     * @deprecated
-     * @param values
-     * @return jpaAccounts and some strange event...
-     */
-    public List<JpaAccount> findAccountsByName(List<String> values) {
-        List<JpaAccount> returnValue = new ArrayList<>();
-        List<String> notValidValue = new ArrayList<>();
-        for (int i = 0; i < values.size(); i++) {
-            String s = values.get(i);
-            List<JpaAccount> temps = findByNameOrEmail(s, false);
-            if (temps.size() == 1) {
-                returnValue.addAll(temps);
-            } else {
-                notValidValue.add(s);
-            }
-        }
-        requestManager.addEvent(new WarningEvent("NotAddedAccount", notValidValue));
-        return returnValue;
-    }
-
 }

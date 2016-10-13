@@ -296,33 +296,6 @@ public class UserController {
     }
 
     /**
-     * @param values
-     * @return dunno
-     * @deprecated
-     */
-    @GET
-    @Deprecated
-    @Path("FindAccountsByEmailValues")
-    public List<Map> findAccountsByEmailValues(@QueryParam("values") List<String> values) {
-        return accountFacade.findAccountsByEmailValues(values);
-    }
-
-    /**
-     * @param values
-     * @return dunno
-     * @deprecated
-     */
-    @GET
-    @Deprecated
-    @Path("FindAccountsByName")
-    public List<JpaAccount> findAccountsByName(@QueryParam("values") List<String> values) {
-        if (!SecurityUtils.getSubject().isRemembered() && !SecurityUtils.getSubject().isAuthenticated()) {
-            throw new UnauthorizedException();
-        }
-        return accountFacade.findAccountsByName(values);
-    }
-
-    /**
      * Create a new user
      *
      * @param user new user to save
@@ -513,33 +486,6 @@ public class UserController {
     }
 
     /**
-     * @param username
-     * @param password
-     * @param firstname
-     * @param lastname
-     * @param email
-     * @param request
-     */
-    @POST
-    @Path("Signup")
-    @Deprecated
-    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    public void signup(@FormParam("username") String username,
-            @FormParam("password") String password,
-            @FormParam("firstname") String firstname,
-            @FormParam("lastname") String lastname,
-            @FormParam("email") String email,
-            @Context HttpServletRequest request) {
-        JpaAccount account = new JpaAccount();                                   // Convert post params to entity
-        account.setUsername(username);
-        account.setPassword(password);
-        account.setFirstname(firstname);
-        account.setLastname(lastname);
-        account.setEmail(email);
-        this.signup(account, request);                                                   // and forward
-    }
-
-    /**
      * Create a user based with a JpAAccount
      *
      * @param account
@@ -627,28 +573,6 @@ public class UserController {
     }
 
     /**
-     * Get all roles which have some permissions on the given instance..
-     * <p>
-     * Map is { id : role id, name: role name, permissions: list of permissions
-     * related to instance}
-     * <p>
-     * deprecated ?
-     *
-     * @param instance
-     * @return list of "Role"
-     * @throws AuthorizationException when current user doesn't have edit
-     *                                permission on given instance
-     */
-    @GET
-    @Path("FindPermissionByInstance/{instance}")
-    public List<Map> findPermissionByInstance(@PathParam(value = "instance") String instance) {
-
-        checkGmOrGPermission(instance, "GameModel:Edit:", "Game:Edit:");
-
-        return this.userFacade.findRolePermissionByInstance(instance);
-    }
-
-    /**
      * Get the current user, error 400 if there is no user logged.
      *
      * @return user, the current user;
@@ -693,19 +617,17 @@ public class UserController {
     public Response getTeamByCurrentUser(@PathParam("teamId") Long teamId) {
         Response r = Response.noContent().build();
         User currentUser = userFacade.getCurrentUser();
-        final Collection<Game> playedGames = gameFacade.findRegisteredGames(currentUser.getId());
-        for (Game g : playedGames) {
-            Collection<Team> teams = g.getTeams();
-            for (Team t : teams) {
-                if (teamId.equals(t.getId())) {
-                    for (Player p : t.getPlayers()) {
-                        if (p.getUserId().equals(currentUser.getId())) {
-                            r = Response.ok().entity(t).build();
-                        }
-                    }
+
+        for (Player p : currentUser.getPlayers()) {
+            Team t = p.getTeam();
+            if (t.getId().equals(teamId)) {
+                Game g = t.getGame();
+                if (g.getStatus() == Game.Status.BIN || g.getStatus() == Game.Status.LIVE) {
+                    r = Response.ok().entity(t).build();
                 }
             }
         }
+
         return r;
     }
 

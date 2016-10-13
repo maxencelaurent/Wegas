@@ -92,17 +92,6 @@ public class QuestionDescriptorFacade extends BaseFacade<ChoiceDescriptor> {
         throw new WegasNoResultException("Result \"" + name + "\" not found");
     }
 
-    public Result findResultTQ(final ChoiceDescriptor choiceDescriptor, final String name) throws WegasNoResultException {
-        final TypedQuery<Result> query = getEntityManager().createNamedQuery("Result.findByName", Result.class);
-        query.setParameter("choicedescriptorId", choiceDescriptor.getId());
-        query.setParameter("name", name);
-        try {
-            return query.getSingleResult();
-        } catch (NoResultException ex) {
-            throw new WegasNoResultException(ex);
-        }
-    }
-
     public Result findResult(Long id) {
         return this.getEntityManager().find(Result.class, id);
     }

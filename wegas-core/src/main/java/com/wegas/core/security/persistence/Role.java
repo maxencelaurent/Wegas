@@ -14,6 +14,9 @@ import com.wegas.core.persistence.ListUtils;
 
 import javax.persistence.*;
 import java.util.*;
+import org.eclipse.persistence.config.CacheUsage;
+import org.eclipse.persistence.config.QueryHints;
+import org.eclipse.persistence.config.QueryType;
 
 /**
  * @author Francois-Xavier Aeberhard (fx at red-agent.com)
@@ -24,7 +27,12 @@ import java.util.*;
 })
 @Cacheable(true)
 @NamedQueries({
-    @NamedQuery(name = "Role.findByName", query = "SELECT a FROM Role a WHERE a.name = :name")})
+    @NamedQuery(name = "Role.findByName", query = "SELECT a FROM Role a WHERE a.name = :name",
+            hints = {
+                @QueryHint(name = QueryHints.QUERY_TYPE, value = QueryType.ReadObject),
+                @QueryHint(name = QueryHints.CACHE_USAGE, value = CacheUsage.CheckCacheThenDatabase)
+            }
+    )})
 public class Role extends AbstractEntity {
 
     private static final long serialVersionUID = 1L;
