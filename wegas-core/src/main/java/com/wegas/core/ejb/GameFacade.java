@@ -8,7 +8,6 @@
 package com.wegas.core.ejb;
 
 import com.wegas.core.Helper;
-import com.wegas.core.event.internal.PlayerAction;
 import com.wegas.core.event.internal.ResetEvent;
 import com.wegas.core.event.internal.lifecycle.EntityCreated;
 import com.wegas.core.event.internal.lifecycle.PreEntityRemoved;
@@ -36,7 +35,9 @@ import javax.persistence.TypedQuery;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author Francois-Xavier Aeberhard (fx at red-agent.com)
@@ -59,6 +60,9 @@ public class GameFacade extends BaseFacade<Game> {
      */
     @Inject
     private Event<PreEntityRemoved<Game>> gameRemovedEvent;
+
+    @EJB
+    private RequestFacade requestFacade;
 
     /**
      *
@@ -84,11 +88,8 @@ public class GameFacade extends BaseFacade<Game> {
     @EJB
     private UserFacade userFacade;
 
-    /**
-     *
-     */
     @Inject
-    private Event<PlayerAction> playerActionEvent;
+    private RequestManager requestManager;
 
     /**
      *
@@ -112,7 +113,7 @@ public class GameFacade extends BaseFacade<Game> {
         GameModel gm = gameModelFacade.duplicate(gameModelId);
         gm.setName(gameModelFacade.find(gameModelId).getName());// @HACK Set name back to the original
         gm.setComments(""); // Clear comments
-        gm.setTemplate(false);
+        gm.setStatus(GameModel.Status.PLAY);
         this.create(gm, game);
     }
 
@@ -142,14 +143,13 @@ public class GameFacade extends BaseFacade<Game> {
             throw WegasErrorMessage.error("This token is already in use.");
         }
         getEntityManager().persist(game);
+        gameModel.propagateDefaultInstance(game, true);
 
         game.setCreatedBy(!(currentUser.getMainAccount() instanceof GuestJpaAccount) ? currentUser : null); // @hack @fixme, guest are not stored in the db so link wont work
         gameModel.addGame(game);
         this.addDebugTeam(game);
 
-//        this.flush();
-        gameModelFacade.reset(gameModel);                                       // Reset the game so the default player will have instances
-
+        //gameModelFacade.reset(gameModel);                                       // Reset the game so the default player will have instances
         userFacade.addUserPermission(currentUser,
                 "Game:View,Edit:g" + game.getId());                             // Grant permission to creator
         userFacade.addUserPermission(currentUser,
@@ -171,7 +171,12 @@ public class GameFacade extends BaseFacade<Game> {
      */
     public boolean addDebugTeam(Game game) {
         if (!game.hasDebugTeam()) {
-            game.addTeam(new DebugTeam());
+            DebugTeam debugTeam = new DebugTeam();
+            debugTeam.setGame(game);
+            teamFacade.create(debugTeam);
+            //Player get = debugTeam.getPlayers().get(0);
+            //requestFacade.commit(get, false);
+            //game.addTeam(new DebugTeam());
             return true;
         } else {
             return false;
@@ -183,7 +188,8 @@ public class GameFacade extends BaseFacade<Game> {
      * @return
      */
     public String createUniqueToken(Game game) {
-        String prefixKey = game.getShortName().toLowerCase().replace(" ", "-");
+        //String prefixKey = game.getShortName().toLowerCase().replace(" ", "-");
+        String prefixKey = Helper.replaceSpecialCharacters(game.getShortName().toLowerCase().replace(" ", "-"));
         boolean foundUniqueKey = false;
         int counter = 0;
         String key = null;
@@ -289,14 +295,151 @@ public class GameFacade extends BaseFacade<Game> {
     }
 
     /**
+     * @param userId
+     * @return all non deleted games the given user plays in
+     */
+    public List<Game> findRegisteredGames(final Long userId) {
+        final Query getByGameId = getEntityManager().createQuery("SELECT game, p FROM Game game "
+                + "LEFT JOIN game.teams t LEFT JOIN  t.players p "
+                + "WHERE t.game.id = game.id AND p.team.id = t.id "
+                + "AND p.user.id = :userId AND "
+                + "(game.status = com.wegas.core.persistence.game.Game.Status.LIVE OR game.status = com.wegas.core.persistence.game.Game.Status.BIN) "
+                + "ORDER BY p.joinTime ASC", Game.class)
+                .setParameter("userId", userId);
+
+        return this.findRegisterdGames(getByGameId);
+    }
+
+    /**
+     * @param userId
+     * @param gameModelId
+     * @return all LIVE games of the given GameModel the given user plays in
+     */
+    public List<Game> findRegisteredGames(final Long userId, final Long gameModelId) {
+        final Query getByGameId = getEntityManager().createQuery("SELECT game, p FROM Game game "
+                + "LEFT JOIN game.teams t LEFT JOIN  t.players p "
+                + "WHERE t.game.id = game.id AND p.team.id = t.id AND p.user.id = :userId AND game.gameModel.id = :gameModelId "
+                + "AND game.status = com.wegas.core.persistence.game.Game.Status.LIVE "
+                + "ORDER BY p.joinTime ASC", Game.class)
+                .setParameter("userId", userId)
+                .setParameter("gameModelId", gameModelId);
+
+        return this.findRegisterdGames(getByGameId);
+    }
+
+    /**
+     * @param q
+     * @return Game query result plus createdTime hack
+     */
+    private List<Game> findRegisterdGames(final Query q) {
+        final List<Game> games = new ArrayList<>();
+        for (Object ret : q.getResultList()) {                                // @hack Replace created time by player joined time
+            final Object[] r = (Object[]) ret;
+            final Game game = (Game) r[0];
+            this.getEntityManager().detach(game);
+            game.setCreatedTime(((Player) r[1]).getJoinTime());
+            games.add(game);
+        }
+        return games;
+    }
+
+    /**
+     * @param roleName
+     * @return all game the give role has access to
+     */
+    public Collection<Game> findPublicGamesByRole(String roleName) {
+        Collection<Game> games = new ArrayList<>();
+        try {
+            Role role;
+            role = roleFacade.findByName(roleName);
+            for (Permission permission : role.getPermissions()) {
+                if (permission.getValue().startsWith("Game:View")) {
+                    Long gameId = Long.parseLong(permission.getValue().split(":g")[1]);
+                    Game game = this.find(gameId);
+                    if (game.getStatus() == Game.Status.LIVE) {
+                        games.add(game);
+                    }
+                }
+            }
+        } catch (WegasNoResultException ex) {
+            logger.error("FindPublicGamesByRole: " + roleName + " role not found");
+        }
+        return games;
+    }
+
+    /**
+     * Filter out the debug team
+     *
+     * @param game
+     * @return the game without the debug team
+     */
+    public Game getGameWithoutDebugTeam(Game game) {
+        if (game != null) {
+            this.detach(game);
+            List<Team> withoutDebugTeam = new ArrayList<>();
+            for (Team teamToCheck : game.getTeams()) {
+                if (!(teamToCheck instanceof DebugTeam)) {
+                    withoutDebugTeam.add(teamToCheck);
+                }
+            }
+            game.setTeams(withoutDebugTeam);
+        }
+        return game;
+    }
+
+    public Collection<Game> findByStatusAndUser(Game.Status status) {
+        ArrayList<Game> games = new ArrayList<>();
+        Map<Long, List<String>> gMatrix = new HashMap<>();
+        Map<Long, List<String>> gmMatrix = new HashMap<>();
+
+        String roleQuery = "SELECT p FROM Permission p WHERE "
+                + "(p.role.id in "
+                + "    (SELECT r.id FROM User u JOIN u.roles r WHERE u.id = :userId)"
+                + ")";
+
+        String userQuery = "SELECT p FROM Permission p WHERE p.user.id = :userId";
+
+        gameModelFacade.processQuery(userQuery, gmMatrix, gMatrix, GameModel.Status.PLAY, status);
+        gameModelFacade.processQuery(roleQuery, gmMatrix, gMatrix, GameModel.Status.PLAY, status);
+
+        for (Map.Entry<Long, List<String>> entry : gMatrix.entrySet()) {
+            Long id = entry.getKey();
+            Game g = this.find(id);
+            if (g != null && g.getStatus() == status) {
+                List<String> perm = entry.getValue();
+                if (perm.contains("Edit") || perm.contains("*")) {
+                    Game dg = this.getGameWithoutDebugTeam(g);
+                    GameModel dgm = dg.getGameModel();
+                    List<String> gmPerm = gmMatrix.get(dgm.getId());
+                    if (gmPerm != null) {
+                        dgm.setCanView(gmPerm.contains("View") || gmPerm.contains("*"));
+                        dgm.setCanEdit(gmPerm.contains("Edit") || gmPerm.contains("*"));
+                        dgm.setCanDuplicate(gmPerm.contains("Duplicate") || gmPerm.contains("*"));
+                        dgm.setCanInstantiate(gmPerm.contains("Instantiate") || gmPerm.contains("*"));
+                    } else {
+                        dgm.setCanView(Boolean.FALSE);
+                        dgm.setCanEdit(Boolean.FALSE);
+                        dgm.setCanDuplicate(Boolean.FALSE);
+                        dgm.setCanInstantiate(Boolean.FALSE);
+                    }
+                    games.add(dg);
+                }
+            }
+        }
+
+        return games;
+    }
+
+    /**
      * @param team
      * @param player
      */
     public void joinTeam(Team team, Player player) {
         team.addPlayer(player);
-        getEntityManager().persist(player);
-        team.getGame().getGameModel().propagateDefaultInstance(player);
-        playerActionEvent.fire(new PlayerAction(player));
+        this.getEntityManager().persist(player);
+        team.getGame().getGameModel().propagateDefaultInstance(player, true);
+        this.getEntityManager().flush();
+        requestFacade.firePlayerAction(player, true);
     }
 
     /**
@@ -317,10 +460,12 @@ public class GameFacade extends BaseFacade<Game> {
      */
     public Player joinTeam(Team team, User user) {
         // logger.log(Level.INFO, "Adding user " + userId + " to team: " + teamId + ".");
-        Player p = new Player(user, team);
+        Player p = new Player();
         user.getPlayers().add(p);
+        p.setUser(user);
+        p.setName(user.getName());
+        this.addRights(user, team.getGame());
         this.joinTeam(team, p);
-        this.addRights(user, p.getGame());
         return p;
     }
 
@@ -342,6 +487,17 @@ public class GameFacade extends BaseFacade<Game> {
         user.addPermission(
                 "Game:View:g" + game.getId(), // Add "View" right on game,
                 "GameModel:View:gm" + game.getGameModel().getId());             // and also "View" right on its associated game model
+    }
+
+    public void recoverRights(Game game) {
+        for (Team team : game.getTeams()) {
+            for (Player player : team.getPlayers()) {
+                User user = player.getUser();
+                if (user != null) {
+                    this.addRights(user, game);
+                }
+            }
+        }
     }
 
     /**
@@ -379,7 +535,7 @@ public class GameFacade extends BaseFacade<Game> {
     public void reset(final Game game) {
         // Need to flush so prepersit events will be thrown (for example Game will add default teams)
         //getEntityManager().flush();
-        game.getGameModel().propagateDefaultInstance(game);
+        game.getGameModel().propagateDefaultInstance(game, false);
         //getEntityManager().flush(); // DA FU    ()
         // Send an reset event (for the state machine and other)
         resetEvent.fire(new ResetEvent(game));

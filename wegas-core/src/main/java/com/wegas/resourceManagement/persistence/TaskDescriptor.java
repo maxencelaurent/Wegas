@@ -30,6 +30,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.wegas.core.Helper;
 import com.wegas.core.ejb.VariableDescriptorFacade;
 import com.wegas.core.exception.client.WegasIncompatibleType;
+import com.wegas.core.persistence.variable.Beanjection;
 import com.wegas.resourceManagement.ejb.IterationFacade;
 import javax.persistence.CascadeType;
 import javax.persistence.Column;
@@ -466,9 +467,9 @@ public class TaskDescriptor extends VariableDescriptor<TaskInstance> {
     }
 
     @Override
-    public void updateCacheOnDelete() {
-        VariableDescriptorFacade vdf = VariableDescriptorFacade.lookup();
-        IterationFacade iteF = IterationFacade.lookup();
+    public void updateCacheOnDelete(Beanjection beans) {
+        VariableDescriptorFacade vdf = beans.getVariableDescriptorFacade();
+        IterationFacade iteF = beans.getIterationFacade();
 
         for (TaskDescriptor theTask : this.dependencies) {
             theTask = (TaskDescriptor) vdf.find(theTask.getId());
@@ -494,6 +495,6 @@ public class TaskDescriptor extends VariableDescriptor<TaskInstance> {
         }
         this.setIterations(new ArrayList<>());
 
-        super.updateCacheOnDelete();
+        super.updateCacheOnDelete(beans);
     }
 }

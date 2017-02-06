@@ -51,7 +51,7 @@ YUI().use(function(Y) {
             "wegas-app": {
                 requires: ["base", "plugin", "array-extras", "timers",
                     "wegas-helper", "wegas-entity", "wegas-datasource", "font-awesome", "template-micro", "wegas-i18n",
-                    "wegas-keyframescss"]
+                    "wegas-keyframescss", "wegas-lockmanager"]
             },
             "wegas-keyframescss": {
                 type: CSS
@@ -60,13 +60,13 @@ YUI().use(function(Y) {
                 requires: "inputex-jsonschema"
             },
             "wegas-i18n-global-fr": {
-                path: 'js/i18n/i18n-global-fr.js'
+                path: 'js/i18n/i18n-global-fr-min.js'
             },
             "wegas-i18n-global-en": {
-                path: 'js/i18n/i18n-global-en.js'
+                path: 'js/i18n/i18n-global-en-min.js'
             },
             "wegas-i18n-global": {
-                path: 'js/i18n/i18n-global.js',
+                path: 'js/i18n/i18n-global-min.js',
                 requires: ['wegas-i18n']
             },
             "wegas-i18n": {},
@@ -338,6 +338,11 @@ YUI().use(function(Y) {
             "wegas-injector": {
                 path: "js/plugin/wegas-injector-min.js",
                 ws_provides: "Injector"
+            },
+            "wegas-lockmanager": {
+                path: "js/plugin/wegas-lockmanager-min.js",
+                requires: "wegas-plugin",
+                ws_provides: ["LockManager", "Lockable"]
             },
             "wegas-cssloader": {
                 path: "js/plugin/wegas-cssloader-min.js",
@@ -901,18 +906,32 @@ YUI().use(function(Y) {
                     "wegas-reviewing-entities",
                     "datatable",
                     "overlay",
+                    "wegas-i18n-review",
                     "slider",
                     "wegas-teams-dashboard",
+                    "wegas-layout-list",
                     "chartist",
+                    "treeview",
                     "wegas-text-input",
                     "wegas-tabview"],
                 ws_provides: ["ReviewVariableEditor",
                     "ReviewOrchestrator",
                     "ReviewTabView",
+                    "ReviewTreeView",
                     "ReviewWidget",
                     "GradeInput",
                     "TextEvalInput",
                     "CategorizationInput"]
+            },
+            "wegas-i18n-review-fr": {
+                path: 'js/i18n/i18n-review-fr-min.js'
+            },
+            "wegas-i18n-review-en": {
+                path: 'js/i18n/i18n-review-en-min.js'
+            },
+            "wegas-i18n-review": {
+                path: 'js/i18n/i18n-review-min.js',
+                requires: ['wegas-i18n', 'wegas-i18n-global']
             }
         }
     });
@@ -1021,7 +1040,7 @@ YUI().use(function(Y) {
                 path: "ace/src-min/ace.js"
             },
             pusher: {
-                fullpath: "//js.pusher.com/2.2/pusher.min.js"
+                fullpath: "//js.pusher.com/3.2/pusher.min.js"
             },
             googletranslate: {
                 async: false,
@@ -1029,7 +1048,7 @@ YUI().use(function(Y) {
             },
             "font-awesome": {
                 type: CSS,
-                fullpath: "//maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"
+                fullpath: "//maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css"
             },
             "chart-js": {
                 async: false,

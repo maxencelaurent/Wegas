@@ -7,21 +7,24 @@
  */
 package com.wegas.core.ejb;
 
+import com.wegas.core.ejb.statemachine.StateMachineEventCounter;
 import com.wegas.core.exception.client.WegasErrorMessage;
 import com.wegas.core.exception.client.WegasScriptException;
 import com.wegas.core.persistence.game.Player;
 import com.wegas.core.persistence.game.Script;
-import java.util.Collection;
+import com.wegas.core.persistence.variable.statemachine.StateMachineDescriptor;
+import com.wegas.core.persistence.variable.statemachine.StateMachineInstance;
+import jdk.nashorn.api.scripting.ScriptObjectMirror;
+import org.apache.commons.collections.map.MultiValueMap;
+import org.apache.commons.lang3.ArrayUtils;
+
 import javax.ejb.EJB;
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
-import javax.script.Invocable;
-import javax.script.ScriptEngine;
-import javax.script.ScriptException;
-import org.apache.commons.collections.map.MultiValueMap;
+import java.util.Collection;
+import javax.script.ScriptContext;
 
 /**
- *
  * @author Cyril Junod (cyril.junod at gmail.com)
  */
 @RequestScoped
@@ -69,7 +72,6 @@ public class ScriptEventFacade {
     }
 
     /**
-     *
      * @return
      */
     public Boolean isEventFired() {
@@ -77,7 +79,6 @@ public class ScriptEventFacade {
     }
 
     /**
-     *
      * @param player
      * @param eventName
      * @param param
@@ -88,7 +89,6 @@ public class ScriptEventFacade {
     }
 
     /**
-     *
      * @param player
      * @param eventName
      * @throws com.wegas.core.exception.client.WegasScriptException
@@ -98,7 +98,6 @@ public class ScriptEventFacade {
     }
 
     /**
-     *
      * @param eventName
      * @param param
      * @throws com.wegas.core.exception.client.WegasScriptException
@@ -108,7 +107,6 @@ public class ScriptEventFacade {
     }
 
     /**
-     *
      * @param eventName
      * @throws com.wegas.core.exception.client.WegasScriptException
      */
@@ -120,13 +118,12 @@ public class ScriptEventFacade {
         if (player == null && requestManager.getPlayer() == null) {
             throw WegasErrorMessage.error("An event '" + eventName + "' has been fired without a player defined. A player has to be defined.");
         }
-        if (requestManager.getCurrentEngine() == null) {
-            /* init script engine, declared eventListeners are not yet in memory */
+        if (requestManager.getCurrentScriptContext() == null) {
+            /* init script context, declared eventListeners are not yet in memory */
             scriptFacace.eval(player, new Script(""), null);
         }
-        ScriptEngine engine = requestManager.getCurrentEngine();
         /*
-         * Make sure to set eventFired after engine initiation because events 
+         * Make sure to set eventFired after context initiation because events 
          * are detached by instantiation process
          */
         this.eventFired = true;
@@ -135,21 +132,15 @@ public class ScriptEventFacade {
         if (this.registeredEvents.containsKey(eventName)) {
             Collection callbacks = this.registeredEvents.getCollection(eventName);
             for (Object cb : callbacks) {
-                Object obj = ((Object[]) cb)[0];
+                ScriptObjectMirror obj = (ScriptObjectMirror) ((Object[]) cb)[0];
 
                 Object scope = (((Object[]) cb).length == 2 ? ((Object[]) cb)[1] : new EmptyObject());
-
-                try {
-                    ((Invocable) engine).invokeMethod(obj, "call", scope, params);
-                } catch (ScriptException | NoSuchMethodException ex) {
-                    throw new WegasScriptException("Event exception", ex);
-                }
+                obj.call(scope, params);
             }
         }
     }
 
     /**
-     *
      * @param eventName
      * @return Object[] array of corresponding parameters fired. Length
      *         correspond to number of times eventName has been fired.
@@ -158,12 +149,11 @@ public class ScriptEventFacade {
         if (this.eventsFired.containsKey(eventName)) {
             return this.eventsFired.getCollection(eventName).toArray();
         } else {
-            return new Object[]{};
+            return ArrayUtils.EMPTY_OBJECT_ARRAY;
         }
     }
 
     /**
-     *
      * @param eventName
      * @return
      */
@@ -172,16 +162,38 @@ public class ScriptEventFacade {
     }
 
     /**
-     *
      * @param eventName
      * @return
      */
     public boolean fired(String eventName) {
-        return this.firedCount(eventName) > 0;
+        ScriptContext scriptContext = requestManager.getCurrentScriptContext();
+        if (requestManager.isTestEnv()) {
+            // mark event as watched !!
+            return true;
+        } else {
+
+            Object currentDescriptor = scriptContext.getBindings(ScriptContext.ENGINE_SCOPE).get(ScriptFacade.CONTEXT);
+
+            if (currentDescriptor instanceof StateMachineDescriptor) {
+                int count;
+                StateMachineInstance smi = ((StateMachineDescriptor) currentDescriptor).getInstance(requestManager.getPlayer());
+                StateMachineEventCounter eventCounter = this.requestManager.getEventCounter();
+                count = eventCounter.count(smi, eventName);
+                count += eventCounter.countCurrent(eventName);
+
+                if (this.firedCount(eventName) > count) {
+                    eventCounter.registerEvent(eventName);
+                    return true;
+                } else {
+                    return false;
+                }
+            } else {
+                return this.firedCount(eventName) > 0;
+            }
+        }
     }
 
     /**
-     *
      * @param eventName
      * @param func
      * @param scope
@@ -191,7 +203,6 @@ public class ScriptEventFacade {
     }
 
     /**
-     *
      * @param eventName
      * @param func
      */

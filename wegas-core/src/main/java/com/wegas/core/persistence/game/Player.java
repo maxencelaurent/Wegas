@@ -16,10 +16,10 @@ import javax.persistence.*;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.wegas.core.ejb.TeamFacade;
+import com.wegas.core.persistence.BroadcastTarget;
 import com.wegas.core.persistence.Broadcastable;
+import com.wegas.core.persistence.variable.Beanjection;
 import com.wegas.core.persistence.variable.VariableInstance;
-import com.wegas.core.security.ejb.UserFacade;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +39,7 @@ import java.util.Map;
     @Index(columnList = "user_id"),
     @Index(columnList = "parentteam_id")
 })
-public class Player extends AbstractEntity implements Broadcastable {
+public class Player extends AbstractEntity implements Broadcastable, BroadcastTarget {
 
     private static final long serialVersionUID = 1L;
     @Id
@@ -52,7 +52,7 @@ public class Player extends AbstractEntity implements Broadcastable {
     private User user;
 
     @JsonIgnore
-    @OneToMany(mappedBy = "player", cascade = CascadeType.REMOVE)
+    @OneToMany(mappedBy = "player", cascade = CascadeType.ALL)
     private List<VariableInstance> privateInstances = new ArrayList<>();
 
     /**
@@ -301,18 +301,24 @@ public class Player extends AbstractEntity implements Broadcastable {
     }
 
     @Override
-    public void updateCacheOnDelete() {
+    public void updateCacheOnDelete(Beanjection beans) {
         if (this.getUser() != null) {
-            User theUser = UserFacade.lookup().find(this.getUserId());
+            User theUser = beans.getUserFacade().find(this.getUserId());
             if (theUser != null) {
                 theUser.getPlayers().remove(this);
             }
         }
         if (this.getTeam() != null) {
-            Team find = TeamFacade.lookup().find(this.getTeamId());
+            Team find = beans.getTeamFacade().find(this.getTeamId());
             if (find != null) {
                 find.getPlayers().remove(this);
             }
         }
+    }
+
+    @JsonIgnore
+    @Override
+    public String getChannel() {
+        return "Player-" + this.getId();
     }
 }

@@ -11,6 +11,7 @@ import com.wegas.core.Helper;
 import com.wegas.core.event.internal.ResetEvent;
 import com.wegas.core.exception.internal.WegasNoResultException;
 import com.wegas.core.persistence.game.DebugGame;
+import com.wegas.core.persistence.game.DebugTeam;
 import com.wegas.core.persistence.game.Game;
 import com.wegas.core.persistence.game.GameModel;
 import com.wegas.core.persistence.game.Player;
@@ -23,8 +24,8 @@ import com.wegas.core.persistence.variable.scope.PlayerScope;
 import com.wegas.core.persistence.variable.scope.TeamScope;
 import com.wegas.core.security.ejb.UserFacade;
 import com.wegas.core.security.persistence.User;
-import java.util.AbstractList;
 import java.util.ArrayList;
+import java.util.Collection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,6 +69,9 @@ public class PlayerFacade extends BaseFacade<Player> {
      */
     @EJB
     private UserFacade userFacade;
+
+    @Inject
+    private RequestManager requestManager;
 
     @Inject
     private Event<ResetEvent> resetEvent;
@@ -303,6 +307,25 @@ public class PlayerFacade extends BaseFacade<Player> {
     }
 
     /**
+     * Returns the first available player in the target game.
+     *
+     * @param gameId
+     * @return a player from the game
+     * @throws com.wegas.core.exception.internal.WegasNoResultException
+     */
+    public Player findDebugPlayerByGameId(Long gameId) throws WegasNoResultException {
+        Game game = gameFacade.find(gameId);
+        for (Team t : game.getTeams()) {
+            if (t instanceof DebugTeam) {
+                if (t.getPlayers().size() > 0) {
+                    return t.getPlayers().get(0);
+                }
+            }
+        }
+        throw new WegasNoResultException("No player");
+    }
+
+    /**
      * @param gameModelId
      * @return all players from all teams and all games from gameModel
      */
@@ -387,7 +410,7 @@ public class PlayerFacade extends BaseFacade<Player> {
         // Need to flush so prepersit events will be thrown (for example Game will add default teams)
         // F*cking flush
         //getEntityManager().flush();
-        player.getGameModel().propagateDefaultInstance(player);
+        player.getGameModel().propagateDefaultInstance(player, false);
         // F*cking flush
         //getEntityManager().flush();
         // Send an reset event (for the state machine and other)
@@ -413,5 +436,20 @@ public class PlayerFacade extends BaseFacade<Player> {
             logger.error("Error retrieving player facade", ex);
             return null;
         }
+    }
+
+    public Collection<String> getLocks(Long playerId) {
+        Player player = this.find(playerId);
+        Team team = player.getTeam();
+        Game game = player.getGame();
+        GameModel gameModel = game.getGameModel();
+
+        List<String> audiences = new ArrayList<>();
+        audiences.add("Player-" + player.getId());
+        audiences.add("Team-" + team.getId());
+        audiences.add("Game-" + game.getId());
+        audiences.add("GameModel-" + gameModel.getId());
+
+        return requestManager.getTokensByAudiences(audiences);
     }
 }

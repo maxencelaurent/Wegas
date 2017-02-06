@@ -7,16 +7,17 @@
  */
 package com.wegas.core.ejb;
 
+import com.wegas.core.ejb.statemachine.StateMachineEventCounter;
 import com.wegas.core.event.client.ClientEvent;
 import com.wegas.core.event.client.CustomEvent;
 import com.wegas.core.event.client.ExceptionEvent;
-import com.wegas.core.exception.client.WegasNotFoundException;
+import com.wegas.core.exception.client.WegasErrorMessage;
 import com.wegas.core.exception.client.WegasRuntimeException;
 import com.wegas.core.persistence.AbstractEntity;
+import com.wegas.core.persistence.BroadcastTarget;
 import com.wegas.core.persistence.game.GameModel;
 import com.wegas.core.persistence.game.Player;
 import com.wegas.core.persistence.game.Team;
-import com.wegas.core.rest.util.RequestIdentifierGenerator;
 import com.wegas.core.rest.util.Views;
 import com.wegas.core.security.ejb.UserFacade;
 import com.wegas.core.security.persistence.User;
@@ -25,16 +26,20 @@ import jdk.nashorn.internal.runtime.ScriptObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import javax.ejb.DependsOn;
 import javax.ejb.EJB;
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
 import javax.inject.Named;
-import javax.script.ScriptEngine;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-import javax.ejb.DependsOn;
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
+import javax.script.ScriptContext;
 import javax.ws.rs.core.Response;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.TimeUnit;
 
 //import javax.annotation.PostConstruct;
 /**
@@ -44,6 +49,13 @@ import javax.ws.rs.core.Response;
 @RequestScoped
 @DependsOn("MutexSingleton")
 public class RequestManager {
+
+    @PersistenceContext(unitName = "wegasPU")
+    private EntityManager em;
+
+    public EntityManager getEntityManager() {
+        return em;
+    }
 
     public enum RequestEnvironment {
         STD, // Standard request from standard client (ie a browser)
@@ -58,11 +70,14 @@ public class RequestManager {
     @Inject
     MutexSingleton mutexSingleton;
 
+    @Inject
+    private UserFacade userFacade;
+
     @EJB
     private PlayerFacade playerFacade;
 
-    @EJB
-    private UserFacade userFacade;
+    @Inject
+    private RequestFacade requestFacade;
 
     private static Logger logger = LoggerFactory.getLogger(RequestManager.class);
 
@@ -80,6 +95,7 @@ public class RequestManager {
     private User currentUser;
 
     private String requestId;
+    private String socketId;
     private String method;
     private String path;
     private Long startTimestamp;
@@ -101,9 +117,9 @@ public class RequestManager {
     private Map<String, List<AbstractEntity>> destroyedEntities = new HashMap<>();
 
     /**
-     *
+     * Map TOKEN -> Audience
      */
-    private List<String> lockedToken = new ArrayList<>();
+    private final Map<String, List<String>> lockedToken = new HashMap<>();
 
     /**
      *
@@ -118,7 +134,9 @@ public class RequestManager {
     /**
      *
      */
-    private ScriptEngine currentEngine = null;
+    private ScriptContext currentScriptContext = null;
+
+    private final StateMachineEventCounter eventCounter = new StateMachineEventCounter();
 
     public RequestEnvironment getEnv() {
         return env;
@@ -126,6 +144,10 @@ public class RequestManager {
 
     public void setEnv(RequestEnvironment env) {
         this.env = env;
+    }
+
+    public boolean isTestEnv() {
+        return this.env == RequestEnvironment.TEST;
     }
 
     public void addUpdatedEntities(Map<String, List<AbstractEntity>> entities) {
@@ -140,7 +162,7 @@ public class RequestManager {
         this.addEntities(entities, destroyedEntities);
     }
 
-    public void addEntities(Map<String, List<AbstractEntity>> entities, Map<String, List<AbstractEntity>> container) {
+    private void addEntities(Map<String, List<AbstractEntity>> entities, Map<String, List<AbstractEntity>> container) {
         if (entities != null) {
             for (Map.Entry<String, List<AbstractEntity>> entry : entities.entrySet()) {
                 this.addEntities(entry.getKey(), entry.getValue(), container);
@@ -148,7 +170,7 @@ public class RequestManager {
         }
     }
 
-    public void addEntities(String audience, List<AbstractEntity> updated, Map<String, List<AbstractEntity>> container) {
+    private void addEntities(String audience, List<AbstractEntity> updated, Map<String, List<AbstractEntity>> container) {
         for (AbstractEntity entity : updated) {
             this.addEntity(audience, entity, container);
         }
@@ -185,7 +207,7 @@ public class RequestManager {
      */
     public void setPlayer(Player currentPlayer) {
         if (this.currentPlayer == null || !this.currentPlayer.equals(currentPlayer)) {
-            this.setCurrentEngine(null);
+            this.setCurrentScriptContext(null);
         }
         this.currentPlayer = currentPlayer != null ? (currentPlayer.getId() != null ? playerFacade.find(currentPlayer.getId()) : currentPlayer) : null;
     }
@@ -198,17 +220,21 @@ public class RequestManager {
     }
 
     /**
-     * @return the currentEngine
+     * @return the currentScriptContext
      */
-    public ScriptEngine getCurrentEngine() {
-        return currentEngine;
+    public ScriptContext getCurrentScriptContext() {
+        return currentScriptContext;
     }
 
     /**
-     * @param currentEngine the currentEngine to set
+     * @param currentScriptContext the currentScriptContext to set
      */
-    public void setCurrentEngine(ScriptEngine currentEngine) {
-        this.currentEngine = currentEngine;
+    public void setCurrentScriptContext(ScriptContext currentScriptContext) {
+        this.currentScriptContext = currentScriptContext;
+    }
+
+    public StateMachineEventCounter getEventCounter() {
+        return eventCounter;
     }
 
     /**
@@ -327,32 +353,112 @@ public class RequestManager {
         this.locale = local;
     }
 
+    private String getAudience(BroadcastTarget target) {
+        if (target != null) {
+            String channel = target.getChannel();
+            if (userFacade.hasPermission(channel)) {
+                return channel;
+            } else {
+                throw WegasErrorMessage.error("You don't have the right to lock " + channel);
+            }
+        }
+        return null;
+    }
+
+    private String getEffectiveAudience(String audience) {
+        if (audience != null && !audience.isEmpty()) {
+            return audience;
+        } else {
+            return "internal";
+        }
+    }
+
+    /**
+     * Try to Lock the token. Non-blocking. Return true if token has been
+     * locked, false otherwise
+     *
+     * @param token
+     * @return
+     */
     public boolean tryLock(String token) {
-        boolean tryLock = mutexSingleton.tryLock(token);
+        return tryLock(token, null);
+    }
+
+    /**
+     *
+     * @param token  token to tryLock
+     * @param target scope to inform about the lock
+     * @return
+     */
+    public boolean tryLock(String token, BroadcastTarget target) {
+        String audience = getAudience(target);
+        boolean tryLock = mutexSingleton.tryLock(token, audience);
         if (tryLock) {
             // Only register token if successfully locked
-            lockedToken.add(token);
+            if (!lockedToken.containsKey(token)) {
+                lockedToken.put(token, new ArrayList());
+            }
+            lockedToken.get(token).add(getEffectiveAudience(audience));
         }
         return tryLock;
     }
 
+    /**
+     *
+     * @param token token to lock
+     */
     public void lock(String token) {
-        mutexSingleton.lock(token);
-        lockedToken.add(token);
+        this.lock(token, null);
     }
 
-    public void unlock(String token) {
-        mutexSingleton.unlock(token);
-        if (lockedToken.contains(token)) {
-            lockedToken.remove(token);
+    /**
+     *
+     * @param token  token to lock
+     * @param target scope to inform about the lock
+     */
+    public void lock(String token, BroadcastTarget target) {
+        String audience = getAudience(target);
+        mutexSingleton.lock(token, audience);
+        if (!lockedToken.containsKey(token)) {
+            lockedToken.put(token, new ArrayList());
         }
+        lockedToken.get(token).add(getEffectiveAudience(audience));
+    }
+
+    /**
+     *
+     * @param token token to release
+     */
+    public void unlock(String token) {
+        this.unlock(token, null);
+    }
+
+    /**
+     *
+     * @param token  token to release
+     * @param target scope to inform about the lock
+     */
+    public void unlock(String token, BroadcastTarget target) {
+        String audience = getAudience(target);
+        mutexSingleton.unlock(token, audience);
+        if (lockedToken.containsKey(token)) {
+            List<String> audiences = lockedToken.get(token);
+            audiences.remove(getEffectiveAudience(audience));
+            if (audiences.isEmpty()) {
+                lockedToken.remove(token);
+            }
+        }
+    }
+
+    public Collection<String> getTokensByAudiences(List<String> audiences) {
+        return mutexSingleton.getTokensByAudiences(audiences);
     }
 
     public void setStatus(Response.StatusType statusInfo) {
         this.status = statusInfo;
     }
 
-    public void markProcessingStartTime() {
+    private void markProcessingStartTime() {
         this.startTimestamp = System.currentTimeMillis();
     }
 
@@ -392,6 +498,14 @@ public class RequestManager {
         return requestId;
     }
 
+    public String getSocketId() {
+        return socketId;
+    }
+
+    public void setSocketId(String socketId) {
+        this.socketId = socketId;
+    }
+
     public String getMethod() {
         return method;
     }
@@ -408,14 +522,34 @@ public class RequestManager {
         this.path = path;
     }
 
-    public void logRequest() {
+    private void logRequest() {
         long endTime = System.currentTimeMillis();
 
         long totalDuration = endTime - this.startTimestamp;
-        long processingDuration = this.managementStartTime - this.startTimestamp;
-        long managementDuration = this.serialisationStartTime - this.managementStartTime;
-        Long propagationTime = this.propagationEndTime != null ? this.propagationEndTime - this.propagationStartTime : null;
-        long serialisationDuration = endTime - this.serialisationStartTime;
+
+        Long mgmtTime;
+        Long propagationTime;
+
+        String processingDuration;
+        String managementDuration;
+        String propagationDuration;
+        String serialisationDuration;
+
+        mgmtTime = this.serialisationStartTime != null && this.managementStartTime != null ? (this.serialisationStartTime - this.managementStartTime) : null;
+        propagationTime = this.propagationEndTime != null ? (this.propagationEndTime - this.propagationStartTime) : null;
+
+        if (propagationTime != null) {
+            //If propagation occurs, deduct its duration from managementTime because
+            //management includes propagation
+            mgmtTime -= propagationTime;
+            propagationDuration = Long.toString(propagationTime);
+        } else {
+            propagationDuration = " N/A";
+        }
+
+        processingDuration = this.managementStartTime != null ? Long.toString(this.managementStartTime - this.startTimestamp) : "N/A";
+        managementDuration = mgmtTime != null ? Long.toString(mgmtTime) : "N/A";
+        serialisationDuration = this.serialisationStartTime != null ? Long.toString(endTime - this.serialisationStartTime) : "N/A";
 
         Team currentTeam = null;
         if (currentPlayer != null) {
@@ -431,7 +565,7 @@ public class RequestManager {
                 + " processed in " + totalDuration + " ms ("
                 + " processing: " + processingDuration + "; "
                 + " management: " + managementDuration + "; "
-                + (propagationTime != null ? "propagation: " + propagationTime + "; " : "")
+                + " propagation: " + propagationDuration + "; "
                 + " serialisation: " + serialisationDuration
                 + ") => " + this.status);
     }
@@ -439,18 +573,39 @@ public class RequestManager {
     /**
      * Lifecycle
      */
-    /*@PostConstruct
+    @PostConstruct
     public void postConstruct() {
-        logger.error("Request Manager: PostConstruct: " + this);
-    }*/
+        this.markProcessingStartTime();
+    }
+
     @PreDestroy
     public void preDestroy() {
-        while (!lockedToken.isEmpty()) {
-            String remove = lockedToken.remove(0);
-            mutexSingleton.unlockFull(remove);
+        for (Entry<String, List<String>> entry : lockedToken.entrySet()) {
+            for (String audience : entry.getValue()) {
+                mutexSingleton.unlockFull(entry.getKey(), audience);
+            }
+        }
+        if (this.currentScriptContext != null) {
+            this.currentScriptContext.getBindings(ScriptContext.ENGINE_SCOPE).clear();
+            this.currentScriptContext = null;
         }
 
         this.logRequest();
+
+        //this.getEntityManager().flush();
+        this.getEntityManager().clear();
+    }
+
+    public void commit(Player player, boolean clear) {
+        this.requestFacade.commit(player, clear);
+    }
+
+    public void commit(Player player) {
+        this.requestFacade.commit(player, true);
+    }
+
+    public void commit() {
+        this.requestFacade.commit(this.getPlayer(), true);
     }
 
     /**
@@ -464,4 +619,5 @@ public class RequestManager {
             }
         }
     }
+
 }
