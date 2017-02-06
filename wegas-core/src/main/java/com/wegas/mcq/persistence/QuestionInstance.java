@@ -7,9 +7,11 @@
  */
 package com.wegas.mcq.persistence;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.wegas.core.exception.client.WegasIncompatibleType;
 import com.wegas.core.persistence.AbstractEntity;
+import com.wegas.core.persistence.BroadcastTarget;
 import com.wegas.core.persistence.EntityIdComparator;
 import com.wegas.core.persistence.ListUtils;
 import com.wegas.core.persistence.variable.VariableInstance;
@@ -177,5 +179,13 @@ public class QuestionInstance extends VariableInstance {
      */
     public ChoiceDescriptor item(int index) {
         return ((QuestionDescriptor) this.getDescriptor()).item(index);
+    }
+
+    @JsonIgnore
+    public boolean isSelectable() {
+        QuestionDescriptor qd = (QuestionDescriptor) this.findDescriptor();
+        return (qd.getCbx() && !this.getValidated()) // a not yet validated cbx question
+                || qd.getAllowMultipleReplies() // OR several answers are allowed 
+                || this.getReplies().isEmpty(); // OR no reply yet
     }
 }

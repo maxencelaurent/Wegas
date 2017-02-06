@@ -169,16 +169,16 @@ public class UserFacade extends BaseFacade<User> {
         try {
             this.addRole(user, roleFacade.findByName("Public"));
         } catch (WegasNoResultException ex) {
-            logger.error("Unable to find Role: Public");
+            //logger.error("Unable to find Role: Public");
         }
         try {
             this.addRole(user, roleFacade.findByName("Registered"));
         } catch (WegasNoResultException ex) {
             //logger.error("Unable to find Role: Registered", ex);
-            logger.error("Unable to find Role: Registered");
+            //logger.error("Unable to find Role: Registered");
         }
         /*
-         * Very strange behaviour: without this flush, RequestManaged failed to be injected within others beans...
+         * Very strange behaviour: without this flush, RequestManages faild to be injected within others beans...
          */
         this.getEntityManager().flush();
     }
@@ -525,7 +525,7 @@ public class UserFacade extends BaseFacade<User> {
                 emailFacade.send(acc.getEmail(), from, null, subject, body, Message.RecipientType.TO, "text/plain", true);
             }
         } catch (WegasNoResultException | MessagingException ex) {
-            System.out.println(ex);
+            logger.error("Error while sending new password for email: " + email, ex);
         }
     }
 
@@ -580,6 +580,9 @@ public class UserFacade extends BaseFacade<User> {
         for (GuestJpaAccount account : resultList) {
             this.remove(account.getUser());
         }
+
+        //Force flush before closing RequestManager !
+        getEntityManager().flush();
 
         logger.info("removeIdleGuests(): " + resultList.size() + " unused guest accounts removed (idle since: " + calendar.getTime() + ")");
     }

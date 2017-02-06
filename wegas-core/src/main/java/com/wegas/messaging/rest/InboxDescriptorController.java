@@ -91,7 +91,7 @@ public class InboxDescriptorController {
 
         update.setUnread(false);
         if (!Helper.isNullOrEmpty(update.getToken())) {
-            requestFacade.commit();
+            requestFacade.commit(true);
         }
         return update.getInboxInstance();
     }
@@ -115,7 +115,7 @@ public class InboxDescriptorController {
             commit = commit || !Helper.isNullOrEmpty(message.getToken());
         }
         if (commit) {
-            requestFacade.commit();
+            requestFacade.commit(true);
         }
         return inbox;
     }

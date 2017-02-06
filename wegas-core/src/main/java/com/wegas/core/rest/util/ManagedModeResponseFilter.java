@@ -47,7 +47,7 @@ public class ManagedModeResponseFilter implements ContainerResponseFilter {
      *
      */
     @EJB
-    private RequestFacade rmf;
+    private RequestFacade requestFacade;
 
     @EJB
     private UserFacade userFacade;
@@ -64,7 +64,7 @@ public class ManagedModeResponseFilter implements ContainerResponseFilter {
         final String managedMode = request.getHeaderString("managed-mode");
 
         // Todo find a way to access response from RequestManager.preDestroy (@Context HttpServletResponse?)  WHY ?
-        RequestManager requestManager = rmf.getRequestManager();
+        RequestManager requestManager = requestFacade.getRequestManager();
 
         requestManager.markManagermentStartTime();
         requestManager.setStatus(response.getStatusInfo());
@@ -92,7 +92,7 @@ public class ManagedModeResponseFilter implements ContainerResponseFilter {
              * Behaviour is to return a managed response with an empty entity list
              * and to register the exception as a request exception event
              */
-            if (response.getEntity() instanceof Exception || requestManager.getExceptionCounter() > 0) {
+            if (response.getEntity() instanceof Exception || requestManager.getExceptionCounter() > 0 || response.getStatusInfo().getStatusCode() >= 400) {
 
                 // No Entities but register exception as event
                 updatedEntities = new ArrayList<>();
@@ -108,7 +108,9 @@ public class ManagedModeResponseFilter implements ContainerResponseFilter {
                 requestManager.addException(wrex);
 
                 // Set response http status code to 400
-                response.setStatus(HttpStatus.SC_BAD_REQUEST);
+                if(response.getStatusInfo().getStatusCode()< 400) {
+                    response.setStatus(HttpStatus.SC_BAD_REQUEST);
+                }
                 rollbacked = true;
             } else {
                 /* 
@@ -139,9 +141,9 @@ public class ManagedModeResponseFilter implements ContainerResponseFilter {
                 response.setStatus(HttpStatus.SC_OK);
             }
 
-            Map<String, List<AbstractEntity>> updatedEntitiesMap = rmf.getUpdatedEntities();
-            Map<String, List<AbstractEntity>> destroyedEntitiesMap = rmf.getDestroyedEntities();
-            Map<String, List<AbstractEntity>> outdatedEntitiesMap = rmf.getOutdatedEntities();
+            Map<String, List<AbstractEntity>> updatedEntitiesMap = requestManager.getUpdatedEntities();
+            Map<String, List<AbstractEntity>> destroyedEntitiesMap = requestManager.getDestroyedEntities();
+            Map<String, List<AbstractEntity>> outdatedEntitiesMap = requestManager.getOutdatedEntities();
 
             if (!rollbacked && !(updatedEntitiesMap.isEmpty() && destroyedEntitiesMap.isEmpty() && outdatedEntitiesMap.isEmpty())) {
                 /*
@@ -196,6 +198,7 @@ public class ManagedModeResponseFilter implements ContainerResponseFilter {
             response.setEntity(serverResponse);
 
         }
+        //requestFacade.flushClear();
         requestManager.markSerialisationStartTime();
     }
 }

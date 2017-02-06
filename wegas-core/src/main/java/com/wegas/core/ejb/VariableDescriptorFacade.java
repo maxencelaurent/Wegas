@@ -14,9 +14,11 @@ import com.wegas.core.event.internal.DescriptorRevivedEvent;
 import com.wegas.core.exception.client.WegasErrorMessage;
 import com.wegas.core.exception.internal.WegasNoResultException;
 import com.wegas.core.persistence.game.GameModel;
+import com.wegas.core.persistence.variable.Beanjection;
 import com.wegas.core.persistence.variable.DescriptorListI;
 import com.wegas.core.persistence.variable.ListDescriptor;
 import com.wegas.core.persistence.variable.VariableDescriptor;
+import com.wegas.core.persistence.variable.VariableInstance;
 import com.wegas.core.persistence.variable.scope.AbstractScope;
 import com.wegas.core.persistence.variable.scope.TeamScope;
 import com.wegas.core.rest.util.JacksonMapperProvider;
@@ -38,6 +40,7 @@ import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Root;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -62,6 +65,9 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
      */
     @EJB
     private GameModelFacade gameModelFacade;
+
+    @EJB
+    private VariableInstanceFacade variableInstanceFacade;
 
     /**
      *
@@ -118,6 +124,7 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
 
         list.addItem(entity);
         this.revive(gameModel, entity, true);
+
         return list;
     }
 
@@ -127,6 +134,11 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
      * @param propagate indicate whether default instance should be propagated
      */
     public void revive(GameModel gameModel, VariableDescriptor entity, boolean propagate) {
+        if (entity.getScope() == null) {
+            entity.setScope(new TeamScope());
+            propagate = true;
+        }
+
         /*
          * This flush is required by several DescriptorRevivedEvent listener, 
          * which opperate some SQL queries (which didn't return anything before
@@ -134,21 +146,17 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
          */
         this.getEntityManager().flush();
 
-        if (entity.getScope() == null) {
-            entity.setScope(new TeamScope());
-            propagate = true;
-        }
-
         // @TODO find a smarter way to decide to propagate or not to propatate...
         if (propagate) {
             AbstractScope scope = entity.getScope();
-            scope.propagateDefaultInstance(null);
+            scope.setBeanjection(new Beanjection(variableInstanceFacade));
+            scope.propagateDefaultInstance(null, true);
         }
 
         descriptorRevivedEvent.fire(new DescriptorRevivedEvent(entity));
         gameModel.addToVariableDescriptors(entity);
         if (entity instanceof DescriptorListI) {
-            this.reviveItems(gameModel, (DescriptorListI) entity, propagate);
+            this.reviveItems(gameModel, (DescriptorListI) entity, propagate); // also revive children
         }
     }
 
@@ -168,6 +176,12 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
      */
     public void preDestroy(GameModel gameModel, VariableDescriptor entity) {
         gameModel.removeFromVariableDescriptors(entity);
+
+        Collection<VariableInstance> values = entity.getScope().getVariableInstances().values();
+        for (VariableInstance vi : values) {
+            variableInstanceFacade.remove(vi);
+        }
+
         if (entity instanceof DescriptorListI) {
             this.preDestroyItems(gameModel, (DescriptorListI) entity);
         }
@@ -227,6 +241,7 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
     public void remove(VariableDescriptor entity) {
         this.preDestroy(entity.getGameModel(), entity);
         entity.getParent().remove(entity);
+
         getEntityManager().remove(entity);
     }
 
@@ -237,12 +252,12 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
      * @throws WegasNoResultException
      */
     public VariableDescriptor find(final GameModel gameModel, final String name) throws WegasNoResultException {
-        /*for (VariableDescriptor vd : gameModel.getVariableDescriptors()) {
-            if (name.equals(vd.getName())) {
-                return vd;
-            }
-        }
-        throw new WegasNoResultException();*/
+//        for (VariableDescriptor vd : gameModel.getVariableDescriptors()) {
+//            if (name.equals(vd.getName())) {
+//                return vd;
+//            }
+//        }
+//        throw new WegasNoResultException();
 
         try {
             TypedQuery<VariableDescriptor> query = getEntityManager().createNamedQuery("VariableDescriptor.findByGameModelIdAndName", VariableDescriptor.class);
@@ -448,6 +463,21 @@ public class VariableDescriptorFacade extends BaseFacade<VariableDescriptor> {
             }
         }
         return variableDescriptor;
+    }
+
+    /**
+     *
+     * @param vd
+     * @param newScope
+     */
+    public void updateScope(VariableDescriptor vd, AbstractScope newScope) {
+        Collection<VariableInstance> values = vd.getScope().getVariableInstancesByKeyId().values();
+        for (VariableInstance vi : values) {
+            variableInstanceFacade.remove(vi);
+        }
+        vd.setScope(newScope);
+        this.getEntityManager().persist(vd);
+        vd.propagateDefaultInstance(null, true);
     }
 
     /**

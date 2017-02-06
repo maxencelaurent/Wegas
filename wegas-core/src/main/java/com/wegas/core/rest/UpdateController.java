@@ -10,6 +10,7 @@ package com.wegas.core.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wegas.core.Helper;
 import com.wegas.core.ejb.GameModelFacade;
+import com.wegas.core.ejb.RequestManager;
 import com.wegas.core.ejb.VariableDescriptorFacade;
 import com.wegas.core.exception.client.WegasNotFoundException;
 import com.wegas.core.exception.internal.WegasNoResultException;
@@ -17,8 +18,13 @@ import com.wegas.core.persistence.game.*;
 import com.wegas.core.persistence.variable.ListDescriptor;
 import com.wegas.core.persistence.variable.VariableDescriptor;
 import com.wegas.core.persistence.variable.VariableInstance;
+import com.wegas.core.persistence.variable.primitive.BooleanInstance;
+import com.wegas.core.persistence.variable.primitive.NumberInstance;
+import com.wegas.core.persistence.variable.primitive.ObjectInstance;
 import com.wegas.core.persistence.variable.primitive.StringDescriptor;
+import com.wegas.core.persistence.variable.primitive.StringInstance;
 import com.wegas.core.persistence.variable.scope.GameModelScope;
+import com.wegas.core.persistence.variable.scope.GameScope;
 import com.wegas.core.persistence.variable.statemachine.State;
 import com.wegas.core.persistence.variable.statemachine.StateMachineDescriptor;
 import com.wegas.core.persistence.variable.statemachine.Transition;
@@ -37,7 +43,6 @@ import org.slf4j.LoggerFactory;
 import javax.ejb.EJB;
 import javax.ejb.Stateless;
 import javax.persistence.EntityManager;
-import javax.persistence.PersistenceContext;
 import javax.persistence.TypedQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
@@ -56,6 +61,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.logging.Level;
 import javax.inject.Inject;
+import javax.persistence.Query;
+import org.eclipse.persistence.config.CacheUsage;
+import org.eclipse.persistence.config.QueryHints;
+import org.eclipse.persistence.config.QueryType;
 
 /**
  * @author Francois-Xavier Aeberhard (fx at red-agent.com)
@@ -79,8 +88,8 @@ public class UpdateController {
     @Inject
     ResourceFacade resourceFacade;
 
-    @PersistenceContext(unitName = "wegasPU")
-    private EntityManager em;
+    @Inject
+    RequestManager requestManager;
 
     /**
      * @return Some String encoded HTML
@@ -170,6 +179,7 @@ public class UpdateController {
     }
 
     private List<GameModel> findPMGs(boolean scenarioOnly) {
+        EntityManager em = this.getEntityManager();
         final CriteriaBuilder criteriaBuilder = em.getCriteriaBuilder();
         final CriteriaQuery<GameModel> query = criteriaBuilder.createQuery(GameModel.class);
 
@@ -193,12 +203,18 @@ public class UpdateController {
 
     private void updateScope(VariableDescriptor vd) {
         if (!(vd.getScope() instanceof GameModelScope)) {
+            EntityManager em = this.getEntityManager();
+
+            Collection<VariableInstance> values = vd.getScope().getVariableInstancesByKeyId().values();
+            for (VariableInstance vi : values) {
+                em.remove(vi);
+            }
             GameModelScope scope = new GameModelScope();
             scope.setBroadcastScope("GameScope");
             scope.setVariableDescscriptor(vd);
             vd.setScope(scope);
             em.persist(vd);
-            vd.propagateDefaultInstance(null);
+            vd.propagateDefaultInstance(null, true);
         }
     }
 
@@ -251,6 +267,43 @@ public class UpdateController {
         return sb.toString();
     }
 
+    private void updateListDescriptorScope(GameModel gameModel) {
+        List<VariableDescriptor> variableDescriptors = gameModel.getVariableDescriptors();
+
+        for (VariableDescriptor vd : variableDescriptors) {
+            if (vd instanceof ListDescriptor) {
+                this.updateScope(vd);
+            }
+        }
+
+    }
+
+    private String lawUpdateScope(GameModel gameModel) {
+        this.updateListDescriptorScope(gameModel);
+        StringBuilder sb = new StringBuilder();
+        try {
+            sb.append("[");
+
+            ListDescriptor etapes = (ListDescriptor) VariableDescriptorFacade.lookup().find(gameModel, "etapes");
+            for (VariableDescriptor item : etapes.getItems()) {
+                this.updateScope(item);
+            }
+
+            sb.append("]");
+
+        } catch (WegasNoResultException ex) {
+            java.util.logging.Logger.getLogger(UpdateController.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return sb.toString();
+    }
+
+    @GET
+    @Path("UpdateLawScope/{gameModelId : ([1-9][0-9]*)}")
+    public String lawScopeUpdate(@PathParam("gameModelId") Long gameModelId) {
+        GameModel find = gameModelFacade.find(gameModelId);
+        return lawUpdateScope(find);
+    }
+
     @GET
     @Path("RtsUpdateScope/{gameModelId : ([1-9][0-9]*)}")
     public String rtsScopeUpdate(@PathParam("gameModelId") Long gameModelId) {
@@ -261,7 +314,7 @@ public class UpdateController {
     private String newScope(GameModel gameModel, VariableDescriptor vd) {
         StringBuilder sb = new StringBuilder();
         try {
-            em.detach(vd);
+            descriptorFacade.detach(vd);
             String name = vd.getName();
             String parentName = vd.getParentList().getName();
 
@@ -272,7 +325,7 @@ public class UpdateController {
             logger.error("JSON for " + parentName + "/" + name + " variable: " + json);
 
             descriptorFacade.remove(vd.getId());
-            em.flush();
+            descriptorFacade.flush();
 
             logger.error("REMOVED");
 
@@ -344,7 +397,7 @@ public class UpdateController {
         try {
             VariableDescriptor vd = mapper.readValue(json, VariableDescriptor.class);
             descriptorController.createChild(gm.getId(), parentName, vd);
-            em.flush();
+            descriptorFacade.flush();
             return "OK";
         } catch (WegasNotFoundException ex) {
             logger.error("Error white adding the variable : parent " + parentName + " not found", ex);
@@ -397,6 +450,7 @@ public class UpdateController {
     public String killOrphans() {
         List<VariableInstance> findOrphans = this.findOrphans();
         int counter = 0;
+        EntityManager em = this.getEntityManager();
 
         /* Kill'em all */
         for (VariableInstance vi : findOrphans) {
@@ -427,9 +481,9 @@ public class UpdateController {
             logger.error("Restore Game: " + g.getName() + "/" + g.getId());
             DebugTeam dt = new DebugTeam();
             g.addTeam(dt);
-            em.persist(dt);
-            g.getGameModel().propagateDefaultInstance(dt);
-            em.flush();
+            this.getEntityManager().persist(dt);
+            g.getGameModel().propagateDefaultInstance(dt, true);
+            this.getEntityManager().flush();
             if (++counter == 25) {
                 break;
             }
@@ -440,7 +494,7 @@ public class UpdateController {
     }
 
     private EntityManager getEntityManager() {
-        return em;
+        return requestManager.getEntityManager();
     }
 
     private boolean hasOccupation(ResourceInstance ri, double time) {
@@ -481,7 +535,7 @@ public class UpdateController {
             /**
              * make sure each occupation exists for each resources
              */
-            Collection<ResourceInstance> resourceInstances = rd.getScope().getVariableInstances().values();
+            Collection<ResourceInstance> resourceInstances = rd.getScope().getPrivateInstances().values();
             for (ResourceInstance resourceInstance : resourceInstances) {
                 for (Entry<Long, List<Occupation>> entry : map.entrySet()) {
                     if (!hasOccupation(resourceInstance, entry.getKey().doubleValue())) {
@@ -501,6 +555,7 @@ public class UpdateController {
     }
 
     private List<Game> findNoDebugTeamGames() {
+        EntityManager em = this.getEntityManager();
         final CriteriaBuilder criteriaBuilder = em.getCriteriaBuilder();
         final CriteriaQuery<Game> query = criteriaBuilder.createQuery(Game.class);
 
@@ -528,15 +583,89 @@ public class UpdateController {
         return noDebugTeamGames;
     }
 
+    @GET
+    @Path("Duplicata")
+    public String getDuplicata() {
+        return this.deleteDuplicata();
+    }
+
+    private String deleteDuplicata() {
+
+        StringBuilder sb = new StringBuilder();
+
+        String sql = "SELECT vi.gameScope, vi.game FROM VariableInstance vi WHERE vi.gameScope IS NOT NULL GROUP BY vi.gameScope.id, vi.game.id HAVING count(vi) > 1";
+        Query createQuery = this.getEntityManager().createQuery(sql);
+
+        List resultList = createQuery.getResultList();
+        int i = 0;
+        for (Object o : resultList) {
+            Object[] array = (Object[]) o;
+            GameScope scope = (GameScope) array[0];
+            Game game = (Game) array[1];
+            //VariableInstance variableInstance = scope.getVariableInstance(game);
+            //System.out.println("DELETE: " + variableInstance);
+
+            sb.append("DELETE: ");
+            sb.append(i++);
+            sb.append(". ");
+
+            String sql2 = "SELECT vi from VariableInstance vi WHERE vi.gameScope.id = :scopeId and vi.game.id = :gameId";
+
+            TypedQuery<VariableInstance> query2 = this.getEntityManager().createQuery(sql2, VariableInstance.class);
+            query2.setHint(QueryHints.CACHE_USAGE, CacheUsage.DoNotCheckCache);
+            //@QueryHint(name = QueryHints.CACHE_USAGE, value = CacheUsage.CheckCacheThenDatabase)
+
+            query2.setParameter("scopeId", scope.getId());
+            query2.setParameter("gameId", game.getId());
+
+            List<VariableInstance> list = query2.getResultList();
+
+            sb.append(list.get(0));
+            sb.append(" SCOPE - TEAM " + scope.getId() + "   " + game.getId());
+
+            sb.append(("<br />"));
+
+            if (list.size() != 2) {
+                sb.append("   -> NOT 2 but " + list.size());
+            } else {
+
+                VariableInstance get = list.get(0);
+                VariableInstance get2 = list.get(1);
+                if (get instanceof BooleanInstance) {
+                    if (((BooleanInstance) get).getValue() != ((BooleanInstance) get2).getValue()) {
+                        sb.append(("   -> NOT EQUALS"));
+                    } else {
+                        this.getEntityManager().remove(get2);
+                    }
+                } else if (get instanceof NumberInstance) {
+                    if (((NumberInstance) get).getValue() != ((NumberInstance) get2).getValue()) {
+                        sb.append(("   -> NOT EQUALS"));
+                    } else {
+                        this.getEntityManager().remove(get2);
+                    }
+                } else if (get instanceof StringInstance) {
+                    if (!((StringInstance) get).getValue().equals(((StringInstance) get2).getValue())) {
+                        sb.append(("   -> NOT EQUALS"));
+                    } else {
+                        this.getEntityManager().remove(get2);
+                    }
+                }
+
+            }
+            sb.append(("<br />"));
+        }
+        return sb.toString();
+    }
+
     private Long countOrphans() {
         String sql = "SELECT count(variableinstance) FROM VariableInstance variableinstance WHERE  (variableinstance.playerScopeKey IS NOT NULL AND  variableinstance.playerScopeKey NOT IN (SELECT player.id FROM Player player)) OR (variableinstance.teamScopeKey IS NOT NULL AND variableinstance.teamScopeKey NOT IN (SELECT team.id FROM Team team)) OR (variableinstance.gameScopeKey IS NOT NULL AND variableinstance.gameScopeKey NOT IN (SELECT game.id from Game game))";
-        TypedQuery<Long> query = em.createQuery(sql, Long.class);
+        TypedQuery<Long> query = this.getEntityManager().createQuery(sql, Long.class);
         return query.getSingleResult();
     }
 
     private List<VariableInstance> findOrphans() {
         String sql = "SELECT variableinstance FROM VariableInstance variableinstance WHERE  (variableinstance.playerScopeKey IS NOT NULL AND  variableinstance.playerScopeKey NOT IN (SELECT player.id FROM Player player)) OR (variableinstance.teamScopeKey IS NOT NULL AND variableinstance.teamScopeKey NOT IN (SELECT team.id FROM Team team)) OR (variableinstance.gameScopeKey IS NOT NULL AND variableinstance.gameScopeKey NOT IN (SELECT game.id from Game game))";
-        TypedQuery<VariableInstance> query = em.createQuery(sql, VariableInstance.class).setMaxResults(3000);
+        TypedQuery<VariableInstance> query = this.getEntityManager().createQuery(sql, VariableInstance.class).setMaxResults(3000);
         return query.getResultList();
     }
 }

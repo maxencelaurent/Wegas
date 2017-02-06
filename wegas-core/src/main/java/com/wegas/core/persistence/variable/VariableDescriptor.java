@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.wegas.core.Helper;
+import com.wegas.core.ejb.VariableDescriptorFacade;
 import com.wegas.core.exception.client.WegasErrorMessage;
 import com.wegas.core.exception.client.WegasIncompatibleType;
 import com.wegas.core.exception.client.WegasNotFoundException;
@@ -34,6 +35,7 @@ import com.wegas.resourceManagement.persistence.BurndownDescriptor;
 import com.wegas.resourceManagement.persistence.ResourceDescriptor;
 import com.wegas.resourceManagement.persistence.TaskDescriptor;
 import com.wegas.reviewing.persistence.PeerReviewDescriptor;
+import org.eclipse.persistence.annotations.CacheIndex;
 import org.eclipse.persistence.annotations.JoinFetch;
 
 import javax.persistence.*;
@@ -42,10 +44,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.eclipse.persistence.annotations.CacheIndex;
+import com.wegas.core.persistence.AcceptInjection;
+import org.eclipse.persistence.annotations.CacheIndexes;
 import org.eclipse.persistence.config.CacheUsage;
 import org.eclipse.persistence.config.QueryHints;
 import org.eclipse.persistence.config.QueryType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @param <T>
@@ -74,9 +79,11 @@ import org.eclipse.persistence.config.QueryType;
             query = "SELECT vd FROM VariableDescriptor vd where vd.gameModel.id = :gameModelId AND vd.name LIKE :name",
             hints = {
                 @QueryHint(name = QueryHints.QUERY_TYPE, value = QueryType.ReadObject),
-                @QueryHint(name = QueryHints.CACHE_USAGE, value = CacheUsage.CheckCacheThenDatabase)
-            }
+                @QueryHint(name = QueryHints.CACHE_USAGE, value = CacheUsage.CheckCacheThenDatabase)}
     )
+})
+@CacheIndexes(value = {
+    @CacheIndex(columnNames = {"GAMEMODEL_GAMEMODELID", "NAME"}) // bug uppercase: https://bugs.eclipse.org/bugs/show_bug.cgi?id=407834
 })
 @JsonSubTypes(value = {
     @JsonSubTypes.Type(name = "ListDescriptor", value = ListDescriptor.class),
@@ -95,10 +102,28 @@ import org.eclipse.persistence.config.QueryType;
     @JsonSubTypes.Type(name = "PeerReviewDescriptor", value = PeerReviewDescriptor.class),
     @JsonSubTypes.Type(name = "BurndownDescriptor", value = BurndownDescriptor.class)
 })
-
-abstract public class VariableDescriptor<T extends VariableInstance> extends NamedEntity implements Searchable, LabelledEntity, Broadcastable {
+@MappedSuperclass
+abstract public class VariableDescriptor<T extends VariableInstance> extends NamedEntity implements Searchable, LabelledEntity, Broadcastable, AcceptInjection {
 
     private static final long serialVersionUID = 1L;
+
+    private static final Logger logger = LoggerFactory.getLogger(VariableDescriptor.class);
+
+    /**
+     * HACK
+     *
+     * Injecting VariableDescriptorFacade here don't bring business logic within
+     * data because the very only functionality that is being used here aims to
+     * replace some slow JPA mechanisms
+     *
+     */
+    @JsonIgnore
+    @Transient
+    private VariableDescriptorFacade variableDescriptorFacade;
+
+    @JsonIgnore
+    @Transient
+    private Beanjection beans;
 
     /**
      *
@@ -121,8 +146,8 @@ abstract public class VariableDescriptor<T extends VariableInstance> extends Nam
      */
     //@JsonBackReference
     @ManyToOne
-    @JoinColumn
-    //@CacheIndex
+    @JoinColumn(name = "gamemodel_gamemodelid")
+    @CacheIndex
     private GameModel gameModel;
 
     /**
@@ -453,7 +478,11 @@ abstract public class VariableDescriptor<T extends VariableInstance> extends Nam
                 this.setComments(other.getComments());
                 this.getDefaultInstance().merge(other.getDefaultInstance());
                 if (other.getScope() != null) {
-                    this.getScope().setBroadcastScope(other.getScope().getBroadcastScope());
+                    if (this.getScope() != null && this.getScope().getClass() != other.getScope().getClass()) {
+                        this.getVariableDescriptorFacade().updateScope(this, other.getScope());
+                    } else {
+                        this.getScope().setBroadcastScope(other.getScope().getBroadcastScope());
+                    }
                 }
             } catch (PersistenceException pe) {
                 throw WegasErrorMessage.error("The name is already in use");
@@ -479,7 +508,7 @@ abstract public class VariableDescriptor<T extends VariableInstance> extends Nam
      *                context. It may be an instance of GameModel, Game, Team,
      *                or Player
      */
-    public void propagateDefaultInstance(AbstractEntity context) {
+    public void propagateDefaultInstance(AbstractEntity context, boolean create) {
         int sFlag = 0;
         if (scope instanceof GameModelScope) { // gms
             sFlag = 4;
@@ -496,7 +525,7 @@ abstract public class VariableDescriptor<T extends VariableInstance> extends Nam
                 || (context instanceof Game && sFlag < 4) // g ctx -> skip gms
                 || (context instanceof Team && sFlag < 3) // t ctx -> skip gms, gs
                 || (context instanceof Player && sFlag < 2)) { // p ctx -> skip gms, gs, ts
-            scope.propagateDefaultInstance(context);
+            scope.propagateDefaultInstance(context, create);
         }
     }
 
@@ -535,5 +564,22 @@ abstract public class VariableDescriptor<T extends VariableInstance> extends Nam
     @Override
     public String toString() {
         return this.getClass().getSimpleName() + "( " + getId() + ", " + this.getName() + ")";
+    }
+
+    @Override
+    public void setBeanjection(Beanjection beanjection) {
+        this.beans = beanjection;
+    }
+
+    private VariableDescriptorFacade getVariableDescriptorFacade() {
+        if (this.beans != null && this.beans.getVariableDescriptorFacade() != null) {
+            return this.beans.getVariableDescriptorFacade();
+        } else if (this.variableDescriptorFacade == null) {
+            logger.error("LOOKUP OCCURS : " + this);
+            new Exception().printStackTrace();
+            this.variableDescriptorFacade = VariableDescriptorFacade.lookup();
+        }
+
+        return this.variableDescriptorFacade;
     }
 }

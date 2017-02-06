@@ -10,9 +10,9 @@ package com.wegas.core.rest;
 import com.wegas.core.Helper;
 import com.wegas.core.ejb.GameFacade;
 import com.wegas.core.ejb.PlayerFacade;
+import com.wegas.core.ejb.RequestManager;
 import com.wegas.core.ejb.TeamFacade;
 import com.wegas.core.exception.internal.WegasNoResultException;
-import com.wegas.core.persistence.game.DebugTeam;
 import com.wegas.core.persistence.game.Game;
 import com.wegas.core.persistence.game.Player;
 import com.wegas.core.persistence.game.Team;
@@ -25,8 +25,7 @@ import org.apache.shiro.authz.annotation.RequiresRoles;
 
 import javax.ejb.EJB;
 import javax.ejb.Stateless;
-import javax.persistence.EntityManager;
-import javax.persistence.PersistenceContext;
+import javax.inject.Inject;
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
@@ -34,7 +33,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
 
 /**
  * @author Francois-Xavier Aeberhard (fx at red-agent.com)
@@ -45,15 +43,16 @@ import java.util.List;
 @Produces(MediaType.APPLICATION_JSON)
 public class GameController {
 
-    @PersistenceContext(unitName = "wegasPU")
-    private EntityManager em;
-
     /**
      *
      */
     @EJB
     private GameFacade gameFacade;
-
+    /**
+     *
+     */
+    @Inject
+    private RequestManager requestManager;
     /**
      *
      */
@@ -121,11 +120,11 @@ public class GameController {
         gameFacade.publishAndCreate(gameModelId, game);
         //@Dirty: those lines exist to get a new game pointer. Cache is messing with it
         // removing debug team will stay in cache as this game pointer is new. work around
-        em.flush();
-        em.detach(game);
-        game = em.find(Game.class, game.getId());
+        gameFacade.flush();
+        gameFacade.detach(game);
+        game = gameFacade.find(game.getId());
         //gameFacade.create(gameModelId, game);
-        return getGameWithoutDebugTeam(game);
+        return gameFacade.getGameWithoutDebugTeam(game);
     }
 
     /**
@@ -142,7 +141,7 @@ public class GameController {
         SecurityUtils.getSubject().checkPermission("GameModel:Instantiate:gm" + gameModelId);
 
         gameFacade.create(gameModelId, entity);
-        return getGameWithoutDebugTeam(entity);
+        return gameFacade.getGameWithoutDebugTeam(entity);
     }
 
     /**
@@ -171,6 +170,23 @@ public class GameController {
         SecurityHelper.checkPermission(gameFacade.find(entityId), "Edit");
 
         return gameFacade.update(entityId, entity);
+    }
+
+    /**
+     * Due to strange unpredictable bug, some users might not have rights to
+     * view the game. This method check if all player within the game have the
+     * correct rights and create them if it's not the case
+     *
+     * @param gameId id of the game one want to recover players rights
+     * @return the game
+     */
+    @PUT
+    @Path("{gameId: [1-9][0-9]*}/recoverRights")
+    public Game recoverRights(@PathParam("gameId") Long gameId) {
+        Game game = gameFacade.find(gameId);
+        SecurityHelper.checkPermission(game, "Edit");
+        gameFacade.recoverRights(game);
+        return game;
     }
 
     /**
@@ -206,16 +222,22 @@ public class GameController {
      * @return all game having the given status
      */
     @GET
-    @Path("status/{status: [A-Z]*}")
-    public Collection<Game> findByStatus(@PathParam("status") final Game.Status status) {
+    @Path("status_old/{status: [A-Z]*}")
+    public Collection<Game> findByStatus_old(@PathParam("status") final Game.Status status) {
         final Collection<Game> retGames = new ArrayList<>();
         final Collection<Game> games = gameFacade.findAll(status);
         for (Game g : games) {
             if (SecurityHelper.isPermitted(g, "Edit")) {
-                retGames.add(getGameWithoutDebugTeam(g));
+                retGames.add(gameFacade.getGameWithoutDebugTeam(g));
             }
         }
         return retGames;
+    }
+
+    @GET
+    @Path("status/{status: [A-Z]*}")
+    public Collection<Game> findByStatus(@PathParam("status") final Game.Status status) {
+        return gameFacade.findByStatusAndUser(status);
     }
 
     /**
@@ -227,14 +249,7 @@ public class GameController {
     @GET
     @Path("status/{status: [A-Z]*}/count")
     public int countByStatus(@PathParam("status") final Game.Status status) {
-        final Collection<Game> retGames = new ArrayList<>();
-        final Collection<Game> games = gameFacade.findAll(status);
-        for (Game g : games) {
-            if (SecurityHelper.isPermitted(g, "Edit")) {
-                retGames.add(g);
-            }
-        }
-        return retGames.size();
+        return findByStatus(status).size();
     }
 
     /**
@@ -288,14 +303,16 @@ public class GameController {
             if (game != null) {
                 r = Response.status(Response.Status.CONFLICT).build();
                 if (game.getAccess() == Game.GameAccess.OPEN) {
-                    Player player = playerFacade.checkExistingPlayer(game.getId(), currentUser.getId());
-                    if (player == null) {
-                        if (game.getGameModel().getProperties().getFreeForAll()) {
-                            Team team = new Team("Ind-" + Helper.genToken(12), 1);
-                            teamFacade.create(game.getId(), team); // return managed team
-                            playerFacade.create(team, currentUser);
-                            //Team find = teamFacade.find(team.getId());
-                            r = Response.status(Response.Status.CREATED).entity(team).build();
+                    if (requestManager.tryLock("join-" + gameId + "-" + currentUser.getId())) {
+                        Player player = playerFacade.checkExistingPlayer(game.getId(), currentUser.getId());
+                        if (player == null) {
+                            if (game.getGameModel().getProperties().getFreeForAll()) {
+                                Team team = new Team("Ind-" + Helper.genToken(12), 1);
+                                teamFacade.create(game.getId(), team); // return managed team
+                                playerFacade.create(team, currentUser);
+                                //Team find = teamFacade.find(team.getId());
+                                r = Response.status(Response.Status.CREATED).entity(team).build();
+                            }
                         }
                     }
                 }
@@ -305,33 +322,13 @@ public class GameController {
     }
 
     /**
-     * Filter out the debug team
-     *
-     * @param game
-     * @return the game without the debug team
-     */
-    private Game getGameWithoutDebugTeam(Game game) {
-        if (game != null) {
-            em.detach(game);
-            List<Team> withoutDebugTeam = new ArrayList<>();
-            for (Team teamToCheck : game.getTeams()) {
-                if (!(teamToCheck instanceof DebugTeam)) {
-                    withoutDebugTeam.add(teamToCheck);
-                }
-            }
-            game.setTeams(withoutDebugTeam);
-        }
-        return game;
-    }
-
-    /**
      * @param token
      * @return game which matches the token, without its debug team
      */
     @GET
-    @Path("/FindByToken/{token : .*}/")
+    @Path("/FindByToken/{token : ([a-zA-Z0-9_-]|\\.(?!\\.))*}")
     public Game findByToken(@PathParam("token") String token) {
-        return getGameWithoutDebugTeam(gameFacade.findByToken(token));
+        return gameFacade.getGameWithoutDebugTeam(gameFacade.findByToken(token));
 
     }
 

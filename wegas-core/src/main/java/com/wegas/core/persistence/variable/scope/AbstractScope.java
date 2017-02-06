@@ -12,6 +12,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.wegas.core.ejb.RequestFacade;
+import com.wegas.core.ejb.VariableInstanceFacade;
 import com.wegas.core.persistence.AbstractEntity;
 import com.wegas.core.persistence.game.Game;
 import com.wegas.core.persistence.game.GameModel;
@@ -25,6 +26,10 @@ import javax.persistence.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import com.wegas.core.persistence.AcceptInjection;
+import com.wegas.core.persistence.variable.Beanjection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 ////import javax.xml.bind.annotation.XmlTransient;
 /**
@@ -41,9 +46,32 @@ import java.util.Map.Entry;
 @Table(indexes = {
     @Index(columnList = "variableinstance_variableinstance_id")
 })
-abstract public class AbstractScope<T extends AbstractEntity> extends AbstractEntity {
+abstract public class AbstractScope<T extends AbstractEntity> extends AbstractEntity implements AcceptInjection {
+
+    private static final Logger logger = LoggerFactory.getLogger(AbstractScope.class);
 
     private static final long serialVersionUID = 1L;
+
+    /**
+     * HACK
+     *
+     * Links from VariableDescriptor to Instances has been cut to avoid using
+     * time-consuming HashMap. Thereby, a new way to getInstances(player) is
+     * required. It's done by using specific named-queries through
+     * VariableInstanceFacade.
+     *
+     * Injecting VariableInstanceFacade here don't bring business logic within
+     * data because the very only functionality that is being used here aims to
+     * replace JPA OneToMany relationship management
+     *
+     */
+    @JsonIgnore
+    @Transient
+    private VariableInstanceFacade variableInstanceFacade;
+
+    @JsonIgnore
+    @Transient
+    private Beanjection beans;
 
     /**
      *
@@ -128,7 +156,7 @@ abstract public class AbstractScope<T extends AbstractEntity> extends AbstractEn
      *
      * @param p instance owner
      */
-    protected void propagate(Player p) {
+    protected void propagate(Player p, boolean create) {
     }
 
     /**
@@ -136,9 +164,9 @@ abstract public class AbstractScope<T extends AbstractEntity> extends AbstractEn
      *
      * @param t the team
      */
-    protected void propagate(Team t) {
+    protected void propagate(Team t, boolean create) {
         for (Player p : t.getPlayers()) {
-            propagate(p);
+            propagate(p, create);
         }
     }
 
@@ -147,9 +175,9 @@ abstract public class AbstractScope<T extends AbstractEntity> extends AbstractEn
      *
      * @param g the game
      */
-    protected void propagate(Game g) {
+    protected void propagate(Game g, boolean create) {
         for (Team t : g.getTeams()) {
-            propagate(t);
+            propagate(t, create);
         }
     }
 
@@ -158,9 +186,9 @@ abstract public class AbstractScope<T extends AbstractEntity> extends AbstractEn
      *
      * @param gm the gameModel
      */
-    protected void propagate(GameModel gm) {
+    protected void propagate(GameModel gm, boolean create) {
         for (Game g : gm.getGames()) {
-            propagate(g);
+            propagate(g, create);
         }
     }
 
@@ -169,8 +197,9 @@ abstract public class AbstractScope<T extends AbstractEntity> extends AbstractEn
      *
      * @param context instance (GameModel, Game, Team, Player) to propagate
      *                instances to (null means propagate to everybody)
+     * @param create
      */
-    abstract public void propagateDefaultInstance(AbstractEntity context);
+    abstract public void propagateDefaultInstance(AbstractEntity context, boolean create);
 
     /**
      * @return
@@ -213,5 +242,22 @@ abstract public class AbstractScope<T extends AbstractEntity> extends AbstractEn
      */
     public void setBroadcastScope(String broadcastScope) {
         this.broadcastScope = broadcastScope;
+    }
+
+    @Override
+    public void setBeanjection(Beanjection beanjection) {
+        this.beans = beanjection;
+    }
+
+    protected VariableInstanceFacade getVariableInstanceFacade() {
+        if (this.beans != null && this.beans.getVariableInstanceFacade() != null) {
+            return this.beans.getVariableInstanceFacade();
+        } else if (this.variableInstanceFacade == null) {
+            logger.error("LOOKUP OCCURS : " + this);
+            new Exception().printStackTrace();
+            this.variableInstanceFacade = VariableInstanceFacade.lookup();
+        }
+
+        return this.variableInstanceFacade;
     }
 }

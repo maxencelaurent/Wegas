@@ -128,7 +128,7 @@ public class ScriptController {
             logger.info("script for player " + playerId + ": " + script.getContent());
 
             Object r = scriptManager.eval(playerId, script, context);
-            requestFacade.commit();
+            requestFacade.commit(true);
             return r;
         } else {
             throw new UnauthorizedException();
@@ -166,8 +166,9 @@ public class ScriptController {
         for (Integer playerId : playerIdList) {
             Object r = scriptManager.eval(playerId.longValue(), script, context);
             results.add(r);
-            requestFacade.commit(playerFacadeFacade.find(playerId.longValue()));
+            requestFacade.commit(playerFacadeFacade.find(playerId.longValue()), false);
         }
+        requestFacade.flushClear();
         return results;
     }
 
@@ -182,7 +183,7 @@ public class ScriptController {
     @GET
     @Path("Test")
     public Map<Long, WegasScriptException> testGameModel(@PathParam("gameModelId") Long gameModelId) {
-        requestFacade.getRequestManager().setEnv(RequestManager.RequestEnvironment.TEST);
+        //requestFacade.getRequestManager().setEnv(RequestManager.RequestEnvironment.TEST);
         List<VariableDescriptor> findAll = variableDescriptorFacade.findAll(gameModelId);
         Player player = gmf.find(gameModelId).getPlayers().get(0);
         Map<Long, WegasScriptException> ret = new HashMap<>();
