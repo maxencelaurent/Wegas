@@ -20,11 +20,13 @@ import com.wegas.core.persistence.game.Player;
 import com.wegas.resourceManagement.persistence.Activity;
 import com.wegas.resourceManagement.persistence.Assignment;
 import com.wegas.resourceManagement.persistence.Occupation;
+import com.wegas.resourceManagement.persistence.ResourceDescriptor;
 import com.wegas.resourceManagement.persistence.ResourceInstance;
 import com.wegas.resourceManagement.persistence.TaskDescriptor;
 import com.wegas.resourceManagement.persistence.TaskInstance;
 import com.wegas.resourceManagement.persistence.WRequirement;
 import java.util.List;
+import java.util.Map;
 import javax.ejb.EJB;
 import javax.ejb.LocalBean;
 import javax.ejb.Stateless;
@@ -360,6 +362,11 @@ public class ResourceFacade {
         logger.debug("Received DescriptorRevivedEvent event");
         if (event.getEntity() instanceof TaskDescriptor) {
             TaskDescriptor task = (TaskDescriptor) event.getEntity();
+            Double duration = task.getDefaultInstance().getDuration();
+            if (duration != null) {
+                // BACKWARD
+                task.getDefaultInstance().setProperty("duration", duration.toString());
+            }
 
             /**
              * Transform task name into real TaskDescriptor
@@ -384,6 +391,20 @@ public class ResourceFacade {
                     }
                 }
             }
+            //this.setPredecessors(ListUtils.updateList(this.getPredecessors(), other.getPredecessors()));
+
+        } else if (event.getEntity() instanceof ResourceDescriptor) {
+            // BACKWARD COMPAT
+            ResourceInstance ri = (ResourceInstance) event.getEntity().getDefaultInstance();
+            Integer moral = ri.getMoral();
+            if (moral != null) {
+                ri.setProperty("motivation", moral.toString());
+        }
+            Map<String, Long> skills = ri.getDeserializedSkillsets();
+            if (skills != null && skills.size() > 0) {
+                Long level = (Long) skills.values().toArray()[0];
+                ri.setProperty("level", level.toString());
+    }
         }
     }
 

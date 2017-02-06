@@ -7,6 +7,7 @@
  */
 package com.wegas.resourceManagement.persistence;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.wegas.core.persistence.AbstractEntity;
 import com.wegas.core.persistence.variable.VariableInstance;
 import java.util.ArrayList;
@@ -16,6 +17,7 @@ import java.util.Map;
 import javax.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.wegas.core.ejb.VariableDescriptorFacade;
 import com.wegas.core.exception.client.WegasIncompatibleType;
 import com.wegas.core.persistence.ListUtils;
@@ -56,12 +58,25 @@ public class ResourceInstance extends VariableInstance {
      *
      */
     private boolean active = true;
-
-    /*
+    /**
+     * Backward compatibility only
+     *
+     * @deprecated
+     */
+    @Transient
+    private Map<String, Long> skillsets;
+    /**
      *
      */
     @ElementCollection
     private Map<String, String> properties = new HashMap<>();
+    /**
+     * Backward compatibility only
+     *
+     * @deprecated
+     */
+    @Transient
+    private Integer moral;
     /**
      *
      */
@@ -284,6 +299,21 @@ public class ResourceInstance extends VariableInstance {
     }
 
     /**
+     * @deprecated @return the skillset
+     */
+    @JsonIgnore
+    public Map<String, Long> getDeserializedSkillsets() {
+        return this.skillsets;
+    }
+
+    /**
+     * @deprecated @param skillsets
+     */
+    public void setSkillsets(Map<String, Long> skillsets) {
+        this.skillsets = skillsets;
+    }
+
+    /**
      * @return the properties
      */
     public Map<String, String> getProperties() {
@@ -324,6 +354,24 @@ public class ResourceInstance extends VariableInstance {
      */
     public double getPropertyD(String key) {
         return Double.valueOf(this.properties.get(key));
+    }
+
+    /**
+     * @return the moral
+     * @deprecated
+     */
+    @JsonIgnore
+    public Integer getMoral() {
+        return this.moral;
+    }
+
+    /**
+     * @param moral the moral to set
+     * @deprecated
+     */
+    @JsonProperty
+    public void setMoral(int moral) {
+        this.moral = moral;
     }
 
     /**
